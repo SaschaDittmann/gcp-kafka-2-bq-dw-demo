@@ -1,40 +1,9 @@
-# =============================================
-# Lab-generated files and directories
-# These are created by participants during the
-# workshop and should not be checked in.
-# =============================================
-
-# Lab 0 — Context Engineering (PRDs and Tasks)
-docs/prds/
-docs/tasks/
-docs/learnings/
-
-# Lab 1 — Data Ingestion (dlt pipeline)
-ingestion/
-data/
-
-# Lab 2 — Data Transformation (dbt project)
-transform/
-
-# Lab 3 — Cloud (Terraform)
-infra/
+# Terraform
 *.tfstate
 *.tfstate.backup
 .terraform/
 *.tfvars
 !*.tfvars.example
-
-# Lab 4a — Orchestration (Airflow)
-dags/
-
-# Lab 4b — Visualization (Streamlit)
-app/
-
-# Lab 4c — AI/ML (BQML queries)
-ml/
-
-# Tests
-tests/
 
 # Git worktrees
 worktrees/
