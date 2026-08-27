@@ -45,3 +45,31 @@ resource "google_project_iam_member" "kafka_connect_roles" {
   role     = each.key
   member   = google_service_account.kafka_connect.member
 }
+
+# -----------------------------------------------------------------------------
+# Cloud Build — Default Compute Engine SA needs storage access
+# gcloud builds submit uses this SA to upload source to the _cloudbuild bucket
+# and write the built image to Artifact Registry.
+# -----------------------------------------------------------------------------
+
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+resource "google_project_iam_member" "cloudbuild_storage" {
+  project = var.project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "cloudbuild_logs" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "cloudbuild_ar_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+}
