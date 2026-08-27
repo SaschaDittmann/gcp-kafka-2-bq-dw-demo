@@ -42,15 +42,9 @@ variable "name_prefix" {
 # -----------------------------------------------------------------------------
 
 variable "vpc_cidr" {
-  description = "Primary CIDR range for the VPC subnet."
+  description = "Primary CIDR range for the VPC subnet. Minimum /22 required for Managed Kafka Connect."
   type        = string
-  default     = "10.0.1.0/24"
-}
-
-variable "vpc_connector_cidr" {
-  description = "Dedicated /28 CIDR for the Serverless VPC Access Connector. Must not overlap with vpc_cidr or psa_cidr."
-  type        = string
-  default     = "10.8.0.0/28"
+  default     = "10.0.0.0/22"
 }
 
 variable "psa_cidr_prefix_length" {

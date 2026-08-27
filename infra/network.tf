@@ -1,10 +1,9 @@
 # =============================================================================
-# Networking: VPC, Subnet, Firewall, VPC Connector, Private Service Access
+# Networking: VPC, Subnet, Firewall, Private Service Access
 # =============================================================================
 # Defines the network topology for the CDC pipeline:
-# - Custom VPC with a single subnet in europe-west1
-# - Firewall rules for internal communication (Cloud SQL, Kafka, Kafka Connect)
-# - Serverless VPC Access Connector for Cloud Run → VPC connectivity
+# - Custom VPC with a single /22 subnet in europe-west1
+# - Firewall rules for internal communication (Cloud SQL, Kafka)
 # - Private Service Access for Cloud SQL private IP
 # =============================================================================
 
@@ -24,8 +23,8 @@ resource "google_compute_network" "vpc" {
 
 # -----------------------------------------------------------------------------
 # Subnet
-# Single subnet in the pipeline region with Private Google Access enabled
-# so that Cloud Run and other private resources can reach GCP APIs.
+# Single /22 subnet in the pipeline region. Minimum /22 required for Managed
+# Kafka Connect. Private Google Access enabled for GCP API connectivity.
 # -----------------------------------------------------------------------------
 
 resource "google_compute_subnetwork" "subnet" {
@@ -50,7 +49,7 @@ resource "google_compute_firewall" "allow_internal" {
   priority    = 1000
   description = "Allow internal TCP traffic for CDC pipeline services"
 
-  source_ranges = [var.vpc_cidr, var.vpc_connector_cidr]
+  source_ranges = [var.vpc_cidr]
 
   allow {
     protocol = "tcp"
@@ -78,25 +77,6 @@ resource "google_compute_firewall" "allow_health_checks" {
     protocol = "tcp"
     ports    = ["8083"]
   }
-}
-
-# -----------------------------------------------------------------------------
-# Serverless VPC Access Connector
-# Enables Cloud Run to communicate with private IP resources (Cloud SQL,
-# Managed Kafka) in the VPC. Uses a dedicated /28 CIDR block.
-# -----------------------------------------------------------------------------
-
-resource "google_vpc_access_connector" "connector" {
-  name          = "${var.name_prefix}-vpc-connector"
-  region        = var.region
-  network       = google_compute_network.vpc.name
-  ip_cidr_range = var.vpc_connector_cidr
-
-  min_instances = 2
-  max_instances = 3
-  machine_type  = "e2-micro"
-
-  depends_on = [google_project_service.apis]
 }
 
 # -----------------------------------------------------------------------------

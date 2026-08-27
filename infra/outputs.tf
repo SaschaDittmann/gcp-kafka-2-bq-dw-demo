@@ -2,7 +2,8 @@
 # Terraform Outputs
 # =============================================================================
 # Exports key resource identifiers for use by deployment scripts and
-# downstream Terraform configurations (Cloud SQL, Kafka, Cloud Run, BigQuery).
+# downstream Terraform configurations (Cloud SQL, Kafka, Kafka Connect,
+# BigQuery).
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -27,16 +28,6 @@ output "subnet_self_link" {
 output "subnet_name" {
   description = "The name of the primary subnet."
   value       = google_compute_subnetwork.subnet.name
-}
-
-output "vpc_connector_name" {
-  description = "The name of the Serverless VPC Access Connector for Cloud Run."
-  value       = google_vpc_access_connector.connector.name
-}
-
-output "vpc_connector_id" {
-  description = "The full resource ID of the Serverless VPC Access Connector."
-  value       = google_vpc_access_connector.connector.id
 }
 
 # -----------------------------------------------------------------------------
@@ -114,41 +105,32 @@ output "kafka_topic_names" {
 }
 
 # -----------------------------------------------------------------------------
-# Artifact Registry
+# Kafka Connect
 # -----------------------------------------------------------------------------
 
-output "artifact_registry_repository" {
-  description = "The Artifact Registry Docker repository ID."
-  value       = google_artifact_registry_repository.docker.repository_id
+output "connect_cluster_id" {
+  description = "The Managed Kafka Connect cluster ID."
+  value       = google_managed_kafka_connect_cluster.connect.connect_cluster_id
 }
 
-output "artifact_registry_url" {
-  description = "The full Artifact Registry URL for docker push/pull."
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"
+output "connect_source_connector_id" {
+  description = "The CDC source connector ID."
+  value       = google_managed_kafka_connector.cdc_source.connector_id
 }
 
-# -----------------------------------------------------------------------------
-# Cloud Run
-# -----------------------------------------------------------------------------
-
-output "cloudrun_source_service_name" {
-  description = "The Cloud Run source (Debezium) service name."
-  value       = google_cloud_run_v2_service.kafka_connect_source.name
+output "connect_bigquery_sink_id" {
+  description = "The BigQuery sink connector ID."
+  value       = google_managed_kafka_connector.bigquery_sink.connector_id
 }
 
-output "cloudrun_source_service_url" {
-  description = "The Cloud Run source service URL."
-  value       = google_cloud_run_v2_service.kafka_connect_source.uri
+output "connect_gcs_sink_id" {
+  description = "The GCS archive sink connector ID."
+  value       = google_managed_kafka_connector.gcs_sink.connector_id
 }
 
-output "cloudrun_sink_service_name" {
-  description = "The Cloud Run sink (BigQuery) service name."
-  value       = google_cloud_run_v2_service.kafka_connect_sink.name
-}
-
-output "cloudrun_sink_service_url" {
-  description = "The Cloud Run sink service URL."
-  value       = google_cloud_run_v2_service.kafka_connect_sink.uri
+output "cdc_archive_bucket" {
+  description = "The GCS bucket for long-term CDC event archive."
+  value       = google_storage_bucket.cdc_archive.name
 }
 
 # -----------------------------------------------------------------------------
