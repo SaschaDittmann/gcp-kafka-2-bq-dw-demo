@@ -16,18 +16,22 @@
 FROM confluentinc/cp-kafka-connect:7.7.1
 
 # Connector versions
-ENV DEBEZIUM_VERSION=2.7.3.Final
+ENV DEBEZIUM_VERSION=2.5.4.Final
 ENV BQ_CONNECTOR_VERSION=2.6.3
 ENV MANAGED_KAFKA_AUTH_VERSION=1.0.6
 
 # -----------------------------------------------------------------------------
-# Install Debezium PostgreSQL Source Connector
+# Install Debezium PostgreSQL Source Connector (from Maven Central)
+# confluent-hub can be unreliable for specific versions, so we download directly
 # -----------------------------------------------------------------------------
-RUN confluent-hub install --no-prompt \
-    debezium/debezium-connector-postgresql:${DEBEZIUM_VERSION}
+RUN mkdir -p /usr/share/confluent-hub-components/debezium-connector-postgresql && \
+    curl -sL "https://repo1.maven.org/maven2/io/debezium/debezium-connector-postgres/${DEBEZIUM_VERSION}/debezium-connector-postgres-${DEBEZIUM_VERSION}-plugin.tar.gz" \
+      -o /tmp/debezium.tar.gz && \
+    tar -xzf /tmp/debezium.tar.gz -C /usr/share/confluent-hub-components/debezium-connector-postgresql/ && \
+    rm /tmp/debezium.tar.gz
 
 # -----------------------------------------------------------------------------
-# Install BigQuery Sink Connector
+# Install BigQuery Sink Connector (from Confluent Hub)
 # -----------------------------------------------------------------------------
 RUN confluent-hub install --no-prompt \
     wepay/kafka-connect-bigquery:${BQ_CONNECTOR_VERSION}
