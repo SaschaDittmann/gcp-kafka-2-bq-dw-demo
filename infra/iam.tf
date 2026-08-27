@@ -66,6 +66,14 @@ resource "google_project_iam_member" "managed_kafka_cloudsql_user" {
   member  = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-managedkafka.iam.gserviceaccount.com"
 }
 
+# The Cloud SQL JDBC socket factory calls the connectSettings API
+# which requires cloudsql.instances.get (not included in cloudsql.client)
+resource "google_project_iam_member" "managed_kafka_cloudsql_viewer" {
+  project = var.project_id
+  role    = "roles/cloudsql.viewer"
+  member  = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-managedkafka.iam.gserviceaccount.com"
+}
+
 # Cloud SQL IAM database user for the Managed Kafka SA
 resource "google_sql_user" "managed_kafka_iam" {
   name     = "service-${data.google_project.current.number}@gcp-sa-managedkafka.iam"
