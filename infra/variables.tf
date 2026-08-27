@@ -47,6 +47,12 @@ variable "vpc_cidr" {
   default     = "10.0.0.0/22"
 }
 
+variable "vpc_connector_cidr" {
+  description = "Dedicated /28 CIDR for the Serverless VPC Access Connector. Must not overlap with vpc_cidr or psa_cidr."
+  type        = string
+  default     = "10.8.0.0/28"
+}
+
 variable "psa_cidr_prefix_length" {
   description = "Prefix length for the Private Service Access IP range (used by Cloud SQL private IP). Typically /20 for production, /24 for demo."
   type        = number

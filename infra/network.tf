@@ -49,7 +49,7 @@ resource "google_compute_firewall" "allow_internal" {
   priority    = 1000
   description = "Allow internal TCP traffic for CDC pipeline services"
 
-  source_ranges = [var.vpc_cidr]
+  source_ranges = [var.vpc_cidr, var.vpc_connector_cidr]
 
   allow {
     protocol = "tcp"
@@ -77,6 +77,26 @@ resource "google_compute_firewall" "allow_health_checks" {
     protocol = "tcp"
     ports    = ["8083"]
   }
+}
+
+# -----------------------------------------------------------------------------
+# Serverless VPC Access Connector
+# Enables Cloud Run to communicate with private IP resources (Cloud SQL,
+# Managed Kafka) in the VPC. Uses a dedicated /28 CIDR block.
+# Used by Cloud Run Kafka Connect services (future deployment).
+# -----------------------------------------------------------------------------
+
+resource "google_vpc_access_connector" "connector" {
+  name          = "${var.name_prefix}-vpc-connector"
+  region        = var.region
+  network       = google_compute_network.vpc.name
+  ip_cidr_range = var.vpc_connector_cidr
+
+  min_instances = 2
+  max_instances = 3
+  machine_type  = "e2-micro"
+
+  depends_on = [google_project_service.apis]
 }
 
 # -----------------------------------------------------------------------------

@@ -3,22 +3,22 @@
 # =============================================================================
 # Defines the Kafka Connect service account and assigns the minimum required
 # IAM roles for CDC ingestion (Kafka client, Cloud SQL client, BigQuery writer,
-# Cloud Storage writer).
+# Cloud Storage writer, Artifact Registry reader).
 #
 # Uses google_project_iam_member (non-authoritative) to avoid overwriting
 # existing role assignments in the project.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Service Account for Kafka Connect (Managed)
-# This identity is used by the Managed Kafka Connect cluster to access
-# Cloud SQL, BigQuery, and Cloud Storage.
+# Service Account for Kafka Connect
+# Used by both Managed Kafka Connect and Cloud Run Kafka Connect services
+# to access Managed Kafka, Cloud SQL, BigQuery, GCS, and Artifact Registry.
 # -----------------------------------------------------------------------------
 
 resource "google_service_account" "kafka_connect" {
   account_id   = "${var.name_prefix}-kafka-connect"
   display_name = "Kafka Connect CDC Pipeline"
-  description  = "Service account for Managed Kafka Connect — CDC source, BigQuery sink, GCS archive"
+  description  = "Service account for Kafka Connect — CDC source, BigQuery sink, GCS archive"
   project      = var.project_id
 
   depends_on = [google_project_service.apis]
@@ -36,6 +36,7 @@ locals {
     "roles/bigquery.dataEditor",       # Write records to BigQuery Bronze tables
     "roles/bigquery.jobUser",          # Run BigQuery load and query jobs
     "roles/storage.objectCreator",     # Write CDC archive files to GCS
+    "roles/artifactregistry.reader",   # Pull container images from Artifact Registry (Cloud Run)
   ]
 }
 
@@ -44,4 +45,33 @@ resource "google_project_iam_member" "kafka_connect_roles" {
   project  = var.project_id
   role     = each.key
   member   = google_service_account.kafka_connect.member
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Build — Default Compute Engine SA needs storage access
+# gcloud builds submit uses this SA to upload source to the _cloudbuild bucket
+# and write the built image to Artifact Registry.
+# Needed for future Cloud Run Kafka Connect deployment.
+# -----------------------------------------------------------------------------
+
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+resource "google_project_iam_member" "cloudbuild_storage" {
+  project = var.project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "cloudbuild_logs" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "cloudbuild_ar_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
 }

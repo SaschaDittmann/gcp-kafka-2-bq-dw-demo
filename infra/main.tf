@@ -64,9 +64,13 @@ locals {
 locals {
   required_services = [
     "compute.googleapis.com",
+    "vpcaccess.googleapis.com",
     "servicenetworking.googleapis.com",
     "sqladmin.googleapis.com",
     "managedkafka.googleapis.com",
+    "run.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "cloudbuild.googleapis.com",
     "bigquery.googleapis.com",
     "bigqueryconnection.googleapis.com",
     "iam.googleapis.com",

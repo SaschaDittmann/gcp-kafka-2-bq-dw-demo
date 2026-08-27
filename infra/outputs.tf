@@ -134,6 +134,54 @@ output "cdc_archive_bucket" {
 }
 
 # -----------------------------------------------------------------------------
+# Artifact Registry (for future Cloud Run deployment)
+# -----------------------------------------------------------------------------
+
+output "artifact_registry_repository" {
+  description = "The Artifact Registry Docker repository ID."
+  value       = google_artifact_registry_repository.docker.repository_id
+}
+
+output "artifact_registry_url" {
+  description = "The full Artifact Registry URL for docker push/pull."
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Run (for future Cloud Run deployment)
+# -----------------------------------------------------------------------------
+
+output "vpc_connector_name" {
+  description = "The name of the Serverless VPC Access Connector for Cloud Run."
+  value       = google_vpc_access_connector.connector.name
+}
+
+output "vpc_connector_id" {
+  description = "The full resource ID of the Serverless VPC Access Connector."
+  value       = google_vpc_access_connector.connector.id
+}
+
+output "cloudrun_source_service_name" {
+  description = "The Cloud Run source (Debezium) service name."
+  value       = google_cloud_run_v2_service.kafka_connect_source.name
+}
+
+output "cloudrun_source_service_url" {
+  description = "The Cloud Run source service URL."
+  value       = google_cloud_run_v2_service.kafka_connect_source.uri
+}
+
+output "cloudrun_sink_service_name" {
+  description = "The Cloud Run sink (BigQuery) service name."
+  value       = google_cloud_run_v2_service.kafka_connect_sink.name
+}
+
+output "cloudrun_sink_service_url" {
+  description = "The Cloud Run sink service URL."
+  value       = google_cloud_run_v2_service.kafka_connect_sink.uri
+}
+
+# -----------------------------------------------------------------------------
 # BigQuery
 # -----------------------------------------------------------------------------
 
