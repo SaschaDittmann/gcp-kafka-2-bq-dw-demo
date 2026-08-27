@@ -129,10 +129,8 @@ resource "google_managed_kafka_connector" "cdc_source" {
 
     # Cloud SQL connection — uses Managed Kafka SA with IAM auth
     # The managed service connects as service-PROJECT_NUMBER@gcp-sa-managedkafka.iam
-    # database.hostname is required by Debezium's validator but overridden by
-    # the Cloud SQL socket factory (driver.cloudSqlInstance)
+    # No database.hostname needed — driver.cloudSqlInstance handles routing
     "database.dbname"          = "chinook"
-    "database.hostname"        = "localhost"
     "driver.cloudSqlInstance"  = google_sql_database_instance.postgres.connection_name
     "driver.enableIamAuth"    = "true"
     "driver.ipTypes"          = "PRIVATE"
