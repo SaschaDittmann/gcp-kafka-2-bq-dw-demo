@@ -65,15 +65,15 @@
   - [x] 1.7 Add logging annotations and labels to all Terraform resources for traceability (e.g., `labels = { managed_by = "terraform", project = "cdc-pipeline-demo" }`)
   - [x] 1.8 Document the networking architecture in `README.md` including a diagram of VPC topology and connectivity between services
 
-- [ ] 2.0 Cloud SQL for PostgreSQL & Database Initialization (Complete Vertical Slice)
-  - [ ] 2.1 Define Cloud SQL instance in `infra/cloudsql.tf`: `google_sql_database_instance` with PostgreSQL 15+, `db-f1-micro` tier, 10 GB SSD, `europe-west1`, private IP on the VPC, and database flags `cloudsql.logical_decoding=on`
-  - [ ] 2.2 Define `google_sql_database` (database name: `chinook`) and `google_sql_user` (replication user) in `infra/cloudsql.tf`; output the instance connection name and private IP in `infra/outputs.tf`
-  - [ ] 2.3 Create `data/chinook_schema.sql` with the full Chinook DDL: all 11 tables (`customer`, `employee`, `artist`, `album`, `track`, `genre`, `media_type`, `invoice`, `invoice_line`, `playlist`, `playlist_track`) with primary keys, foreign keys, and constraints; source from the official Chinook repository and adapt for PostgreSQL
-  - [ ] 2.4 Create `data/chinook_seed.sql` with INSERT statements for all Chinook sample data (~59 customers, 8 employees, 275 artists, 347 albums, 3,503 tracks, 25 genres, 5 media types, 412 invoices, 2,240 invoice lines, 18 playlists); source from the official Chinook repository
-  - [ ] 2.5 Create `data/init_db.sh` that: connects to Cloud SQL via `psql`, grants the replication user the `REPLICATION` role, runs `chinook_schema.sql`, runs `chinook_seed.sql`, creates the logical replication slot via `SELECT pg_create_logical_replication_slot('debezium_slot', 'pgoutput')`, and creates a publication for all tables via `CREATE PUBLICATION debezium_publication FOR ALL TABLES`; add error handling and logging throughout
-  - [ ] 2.6 Write end-to-end tests in `tests/test_database_init.py`: verify the schema exists (table count = 11), seed data row counts match expectations, replication slot exists, and publication exists; include failure case for invalid connection and edge case for idempotent re-runs
-  - [ ] 2.7 Add structured logging to `data/init_db.sh` (timestamped output for each step, exit codes on failure)
-  - [ ] 2.8 Document the database setup in `README.md` including the Chinook schema, how to connect to Cloud SQL, and how to re-initialize
+- [x] 2.0 Cloud SQL for PostgreSQL & Database Initialization (Complete Vertical Slice)
+  - [x] 2.1 Define Cloud SQL instance in `infra/cloudsql.tf`: `google_sql_database_instance` with PostgreSQL 15+, `db-f1-micro` tier, 10 GB SSD, `europe-west1`, private IP on the VPC, and database flags `cloudsql.logical_decoding=on`
+  - [x] 2.2 Define `google_sql_database` (database name: `chinook`) and `google_sql_user` (replication user) in `infra/cloudsql.tf`; output the instance connection name and private IP in `infra/outputs.tf`
+  - [x] 2.3 Create `data/chinook_schema.sql` with the full Chinook DDL: all 11 tables (`customer`, `employee`, `artist`, `album`, `track`, `genre`, `media_type`, `invoice`, `invoice_line`, `playlist`, `playlist_track`) with primary keys, foreign keys, and constraints; source from the official Chinook repository and adapt for PostgreSQL
+  - [x] 2.4 Create `data/chinook_seed.sql` with INSERT statements for all Chinook sample data (~59 customers, 8 employees, 275 artists, 347 albums, 3,503 tracks, 25 genres, 5 media types, 412 invoices, 2,240 invoice lines, 18 playlists); source from the official Chinook repository
+  - [x] 2.5 Create `data/init_db.sh` that: connects to Cloud SQL via `psql`, grants the replication user the `REPLICATION` role, runs `chinook_schema.sql`, runs `chinook_seed.sql`, creates the logical replication slot via `SELECT pg_create_logical_replication_slot('debezium_slot', 'pgoutput')`, and creates a publication for all tables via `CREATE PUBLICATION debezium_publication FOR ALL TABLES`; add error handling and logging throughout
+  - [x] 2.6 Write end-to-end tests in `tests/test_database_init.py`: verify the schema exists (table count = 11), seed data row counts match expectations, replication slot exists, and publication exists; include failure case for invalid connection and edge case for idempotent re-runs
+  - [x] 2.7 Add structured logging to `data/init_db.sh` (timestamped output for each step, exit codes on failure)
+  - [x] 2.8 Document the database setup in `README.md` including the Chinook schema, how to connect to Cloud SQL, and how to re-initialize
 
 - [ ] 3.0 Google Managed Kafka Cluster & Topics (Complete Vertical Slice)
   - [ ] 3.1 Define Managed Kafka cluster in `infra/kafka.tf` using `google_managed_kafka_cluster` (verify resource availability in `google` or `google-beta` provider via Context7); configure smallest available cluster size, `europe-west1`, VPC connectivity, and IAM authentication

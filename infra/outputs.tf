@@ -52,3 +52,44 @@ output "kafka_connect_sa_member" {
   description = "The IAM member string for the Kafka Connect service account."
   value       = google_service_account.kafka_connect.member
 }
+
+# -----------------------------------------------------------------------------
+# Cloud SQL
+# -----------------------------------------------------------------------------
+
+output "cloudsql_instance_name" {
+  description = "The Cloud SQL instance name."
+  value       = google_sql_database_instance.postgres.name
+}
+
+output "cloudsql_connection_name" {
+  description = "Cloud SQL connection name (project:region:instance)."
+  value       = google_sql_database_instance.postgres.connection_name
+}
+
+output "cloudsql_private_ip" {
+  description = "Private IP address of the Cloud SQL PostgreSQL instance."
+  value       = google_sql_database_instance.postgres.private_ip_address
+}
+
+output "cloudsql_database_name" {
+  description = "The name of the Chinook database."
+  value       = google_sql_database.chinook.name
+}
+
+output "cloudsql_admin_user" {
+  description = "The admin database username."
+  value       = google_sql_user.admin.name
+}
+
+output "cloudsql_admin_password" {
+  description = "The admin database password."
+  value       = random_password.db_admin_password.result
+  sensitive   = true
+}
+
+output "cloudsql_repl_password" {
+  description = "The replication user password."
+  value       = random_password.db_repl_password.result
+  sensitive   = true
+}

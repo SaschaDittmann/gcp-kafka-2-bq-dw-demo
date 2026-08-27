@@ -120,6 +120,48 @@ All services communicate over a private custom VPC — no public IP traffic for 
 | Firewall (health checks) | `google_compute_firewall` | Allows Google health check probes |
 | Private Google Access | Subnet attribute | Allows private resources to reach BigQuery and GCP APIs |
 
+## Database Setup (Cloud SQL PostgreSQL)
+
+The pipeline source is a Cloud SQL for PostgreSQL instance running the [Chinook sample database](https://github.com/lerocha/chinook-database) with logical decoding enabled for CDC.
+
+**Instance configuration:**
+- PostgreSQL 15, `db-f1-micro` tier, 10 GB SSD, private IP only
+- Database flag: `cloudsql.logical_decoding = on` (enables WAL-based CDC)
+- Random name suffix to avoid 7-day reuse lockout after `terraform destroy`
+
+**Initialization (`data/init_db.sh`):**
+
+The database is initialized by the deployment script after `terraform apply`:
+
+1. Creates a `debezium` replication user with `REPLICATION` role
+2. Loads the Chinook schema (`data/chinook_schema.sql`) — 11 tables
+3. Seeds sample data (`data/chinook_seed.sql`) — ~15,600 records
+4. Creates the `debezium_slot` logical replication slot (`pgoutput` plugin)
+5. Creates the `debezium_publication` publication for all tables
+
+The script is idempotent — safe to re-run without errors.
+
+**Connecting to Cloud SQL:**
+
+```bash
+# Get connection details from Terraform outputs
+cd infra
+export DB_HOST=$(terraform output -raw cloudsql_private_ip)
+export DB_NAME=$(terraform output -raw cloudsql_database_name)
+export DB_USER=$(terraform output -raw cloudsql_admin_user)
+export DB_PASSWORD=$(terraform output -raw cloudsql_admin_password)
+
+# Connect via Cloud SQL Auth Proxy or psql (requires VPC access)
+gcloud sql connect $(terraform output -raw cloudsql_instance_name) --user=$DB_USER --database=$DB_NAME
+```
+
+**Re-initializing the database:**
+
+```bash
+# Re-run the init script (idempotent — skips existing slots/publications)
+./data/init_db.sh
+```
+
 ## Getting Started
 
 ### 1. Configure
