@@ -96,8 +96,6 @@ resource "google_vpc_access_connector" "connector" {
   max_instances = 3
   machine_type  = "e2-micro"
 
-  labels = local.common_labels
-
   depends_on = [google_project_service.apis]
 }
 
