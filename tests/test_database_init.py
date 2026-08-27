@@ -169,15 +169,21 @@ def test_init_db_creates_publication(init_db_script):
     )
 
 
-def test_init_db_loads_schema_file(init_db_script):
+def test_init_db_imports_schema(init_db_script):
     assert "chinook_schema.sql" in init_db_script, (
-        "init_db.sh must load chinook_schema.sql"
+        "init_db.sh must import chinook_schema.sql"
     )
 
 
-def test_init_db_loads_seed_file(init_db_script):
+def test_init_db_imports_seed(init_db_script):
     assert "chinook_seed.sql" in init_db_script, (
-        "init_db.sh must load chinook_seed.sql"
+        "init_db.sh must import chinook_seed.sql"
+    )
+
+
+def test_init_db_uses_gcloud_sql_import(init_db_script):
+    assert "gcloud sql import sql" in init_db_script, (
+        "init_db.sh must use 'gcloud sql import sql' for schema/seed loading"
     )
 
 
@@ -223,18 +229,18 @@ def test_init_db_has_error_handling(init_db_script):
 # Failure Case: init_db.sh fails without required env vars
 # =========================================================================
 
-def test_init_db_requires_db_host():
+def test_init_db_requires_instance_name():
     result = subprocess.run(
         ["bash", "-c", "source data/init_db.sh"],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
-        env={**os.environ, "DB_USER": "x", "DB_PASSWORD": "x", "REPL_PASSWORD": "x"},
+        env={**os.environ, "PROJECT_ID": "x", "REPL_PASSWORD": "x"},
         timeout=5,
     )
     assert result.returncode != 0, (
-        "init_db.sh should fail when DB_HOST is not set"
+        "init_db.sh should fail when INSTANCE_NAME is not set"
     )
-    assert "DB_HOST" in result.stderr, (
-        f"Error message should mention DB_HOST, got: {result.stderr[:200]}"
+    assert "INSTANCE_NAME" in result.stderr, (
+        f"Error message should mention INSTANCE_NAME, got: {result.stderr[:200]}"
     )

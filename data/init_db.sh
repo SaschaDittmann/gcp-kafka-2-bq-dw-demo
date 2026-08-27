@@ -3,23 +3,25 @@
 # Database Initialization Script
 # =============================================================================
 # Initializes the Chinook database on Cloud SQL for PostgreSQL:
-#   1. Creates the replication user with REPLICATION role
-#   2. Loads the Chinook schema (DDL)
-#   3. Seeds the Chinook sample data
-#   4. Creates the logical replication slot for Debezium
-#   5. Creates a publication for all tables
+#   1. Uploads SQL files to GCS and imports schema + seed data via Cloud SQL
+#   2. Configures replication user, slot, and publication via gcloud sql connect
+#
+# Uses `gcloud sql import sql` for schema/seed (no VPC access needed) and
+# `gcloud sql connect` for replication setup (PostgreSQL functions).
 #
 # Usage:
 #   ./data/init_db.sh
 #
 # Required environment variables:
-#   DB_HOST       - Cloud SQL private IP address
-#   DB_PORT       - PostgreSQL port (default: 5432)
-#   DB_NAME       - Database name (default: chinook)
-#   DB_USER       - Admin user with CREATE/ALTER privileges
-#   DB_PASSWORD   - Admin user password
-#   REPL_USER     - Replication user name (default: debezium)
-#   REPL_PASSWORD - Replication user password
+#   INSTANCE_NAME  - Cloud SQL instance name (e.g., cdc-demo-pg-5767f555)
+#   PROJECT_ID     - GCP project ID
+#   DB_NAME        - Database name (default: chinook)
+#   DB_USER        - Admin user with CREATE/ALTER privileges (default: admin)
+#   REPL_USER      - Replication user name (default: debezium)
+#   REPL_PASSWORD  - Replication user password
+#
+# Optional:
+#   GCS_BUCKET     - GCS bucket for staging SQL files (default: gs://<PROJECT_ID>-sql-import)
 # =============================================================================
 
 set -euo pipefail
@@ -29,16 +31,16 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_HOST="${DB_HOST:?ERROR: DB_HOST environment variable is required}"
-DB_PORT="${DB_PORT:-5432}"
+INSTANCE_NAME="${INSTANCE_NAME:?ERROR: INSTANCE_NAME environment variable is required}"
+PROJECT_ID="${PROJECT_ID:?ERROR: PROJECT_ID environment variable is required}"
 DB_NAME="${DB_NAME:-chinook}"
-DB_USER="${DB_USER:?ERROR: DB_USER environment variable is required}"
-DB_PASSWORD="${DB_PASSWORD:?ERROR: DB_PASSWORD environment variable is required}"
+DB_USER="${DB_USER:-admin}"
 REPL_USER="${REPL_USER:-debezium}"
 REPL_PASSWORD="${REPL_PASSWORD:?ERROR: REPL_PASSWORD environment variable is required}"
+GCS_BUCKET="${GCS_BUCKET:-gs://${PROJECT_ID}-sql-import}"
 
 STEP=0
-TOTAL_STEPS=5
+TOTAL_STEPS=6
 ERRORS=0
 
 # -----------------------------------------------------------------------------
@@ -66,29 +68,17 @@ log_success() {
 }
 
 # -----------------------------------------------------------------------------
-# Helper: Run psql command with connection parameters
+# Helper: Run SQL via gcloud sql connect
+# Pipes SQL commands into an interactive psql session.
 # -----------------------------------------------------------------------------
 
-run_psql() {
-  PGPASSWORD="${DB_PASSWORD}" psql \
-    --host="${DB_HOST}" \
-    --port="${DB_PORT}" \
-    --username="${DB_USER}" \
-    --dbname="${DB_NAME}" \
-    --no-password \
-    --set=ON_ERROR_STOP=1 \
-    "$@"
-}
-
-run_psql_repl() {
-  PGPASSWORD="${REPL_PASSWORD}" psql \
-    --host="${DB_HOST}" \
-    --port="${DB_PORT}" \
-    --username="${REPL_USER}" \
-    --dbname="${DB_NAME}" \
-    --no-password \
-    --set=ON_ERROR_STOP=1 \
-    "$@"
+run_sql() {
+  local sql="$1"
+  echo "${sql}" | gcloud sql connect "${INSTANCE_NAME}" \
+    --user="${DB_USER}" \
+    --database="${DB_NAME}" \
+    --project="${PROJECT_ID}" \
+    --quiet 2>&1
 }
 
 # =============================================================================
@@ -96,14 +86,83 @@ run_psql_repl() {
 # =============================================================================
 
 log_info "Starting Chinook database initialization"
-log_info "Host: ${DB_HOST}:${DB_PORT} | Database: ${DB_NAME} | User: ${DB_USER}"
+log_info "Instance: ${INSTANCE_NAME} | Database: ${DB_NAME} | Project: ${PROJECT_ID}"
 echo ""
 
-# ---- Step 1: Create replication user ----------------------------------------
+# ---- Step 1: Create GCS bucket for SQL file staging -------------------------
 
-log_step "Creating replication user '${REPL_USER}'"
+log_step "Creating GCS bucket for SQL file staging"
 
-run_psql -c "
+if gcloud storage buckets describe "${GCS_BUCKET}" --project="${PROJECT_ID}" > /dev/null 2>&1; then
+  log_info "Bucket ${GCS_BUCKET} already exists — skipping creation"
+else
+  gcloud storage buckets create "${GCS_BUCKET}" \
+    --project="${PROJECT_ID}" \
+    --location="$(echo "${INSTANCE_NAME}" | grep -oP 'europe-west1' || echo 'europe-west1')" \
+    --uniform-bucket-level-access 2>&1 \
+    && log_success "Created staging bucket ${GCS_BUCKET}" \
+    || { log_error "Failed to create GCS bucket"; exit 1; }
+fi
+
+# Grant the Cloud SQL service account read access to the bucket
+SA_EMAIL=$(gcloud sql instances describe "${INSTANCE_NAME}" \
+  --project="${PROJECT_ID}" \
+  --format="value(serviceAccountEmailAddress)")
+
+gcloud storage buckets add-iam-policy-binding "${GCS_BUCKET}" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/storage.objectViewer" \
+  --project="${PROJECT_ID}" --quiet 2>&1 \
+  && log_success "Granted Cloud SQL SA (${SA_EMAIL}) read access to bucket" \
+  || { log_error "Failed to grant bucket access"; exit 1; }
+
+# ---- Step 2: Upload and import Chinook schema ------------------------------
+
+log_step "Importing Chinook schema via Cloud SQL import"
+
+if [[ ! -f "${SCRIPT_DIR}/chinook_schema.sql" ]]; then
+  log_error "Schema file not found: ${SCRIPT_DIR}/chinook_schema.sql"
+  exit 1
+fi
+
+gcloud storage cp "${SCRIPT_DIR}/chinook_schema.sql" "${GCS_BUCKET}/chinook_schema.sql" --quiet 2>&1 \
+  && log_info "Uploaded chinook_schema.sql to ${GCS_BUCKET}" \
+  || { log_error "Failed to upload schema file"; exit 1; }
+
+gcloud sql import sql "${INSTANCE_NAME}" "${GCS_BUCKET}/chinook_schema.sql" \
+  --database="${DB_NAME}" \
+  --user="${DB_USER}" \
+  --project="${PROJECT_ID}" \
+  --quiet 2>&1 \
+  && log_success "Chinook schema imported successfully" \
+  || { log_error "Failed to import schema"; exit 1; }
+
+# ---- Step 3: Upload and import Chinook seed data ---------------------------
+
+log_step "Importing Chinook seed data via Cloud SQL import"
+
+if [[ ! -f "${SCRIPT_DIR}/chinook_seed.sql" ]]; then
+  log_error "Seed file not found: ${SCRIPT_DIR}/chinook_seed.sql"
+  exit 1
+fi
+
+gcloud storage cp "${SCRIPT_DIR}/chinook_seed.sql" "${GCS_BUCKET}/chinook_seed.sql" --quiet 2>&1 \
+  && log_info "Uploaded chinook_seed.sql to ${GCS_BUCKET}" \
+  || { log_error "Failed to upload seed file"; exit 1; }
+
+gcloud sql import sql "${INSTANCE_NAME}" "${GCS_BUCKET}/chinook_seed.sql" \
+  --database="${DB_NAME}" \
+  --user="${DB_USER}" \
+  --project="${PROJECT_ID}" \
+  --quiet 2>&1 \
+  && log_success "Chinook seed data imported successfully" \
+  || { log_error "Failed to import seed data"; exit 1; }
+
+# ---- Step 4: Create replication user ----------------------------------------
+
+log_step "Creating replication user '${REPL_USER}' via gcloud sql connect"
+
+run_sql "
 DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${REPL_USER}') THEN
@@ -111,71 +170,56 @@ BEGIN
     RAISE NOTICE 'Created replication user ${REPL_USER}';
   ELSE
     ALTER ROLE ${REPL_USER} WITH PASSWORD '${REPL_PASSWORD}' REPLICATION;
-    RAISE NOTICE 'Replication user ${REPL_USER} already exists — updated password and ensured REPLICATION role';
+    RAISE NOTICE 'Replication user ${REPL_USER} already exists — updated';
   END IF;
 END
 \$\$;
-" 2>&1 && log_success "Replication user '${REPL_USER}' is ready" \
-       || { log_error "Failed to create replication user"; exit 1; }
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${REPL_USER};
+" && log_success "Replication user '${REPL_USER}' is ready" \
+   || { log_error "Failed to create replication user"; exit 1; }
 
-# ---- Step 2: Load Chinook schema -------------------------------------------
-
-log_step "Loading Chinook schema from chinook_schema.sql"
-
-if [[ ! -f "${SCRIPT_DIR}/chinook_schema.sql" ]]; then
-  log_error "Schema file not found: ${SCRIPT_DIR}/chinook_schema.sql"
-  exit 1
-fi
-
-run_psql -f "${SCRIPT_DIR}/chinook_schema.sql" 2>&1 \
-  && log_success "Chinook schema loaded successfully" \
-  || { log_error "Failed to load Chinook schema"; exit 1; }
-
-# ---- Step 3: Seed demo data ------------------------------------------------
-
-log_step "Seeding Chinook sample data from chinook_seed.sql"
-
-if [[ ! -f "${SCRIPT_DIR}/chinook_seed.sql" ]]; then
-  log_error "Seed file not found: ${SCRIPT_DIR}/chinook_seed.sql"
-  exit 1
-fi
-
-run_psql -f "${SCRIPT_DIR}/chinook_seed.sql" 2>&1 \
-  && log_success "Chinook sample data seeded successfully" \
-  || { log_error "Failed to seed Chinook data"; exit 1; }
-
-# Grant SELECT on all tables to the replication user
-run_psql -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${REPL_USER};" 2>&1 \
-  && log_success "Granted SELECT on all tables to '${REPL_USER}'" \
-  || { log_error "Failed to grant SELECT to replication user"; exit 1; }
-
-# ---- Step 4: Create logical replication slot --------------------------------
+# ---- Step 5: Create logical replication slot --------------------------------
 
 log_step "Creating logical replication slot 'debezium_slot'"
 
-SLOT_EXISTS=$(run_psql -tAc "SELECT COUNT(*) FROM pg_replication_slots WHERE slot_name = 'debezium_slot';")
+run_sql "
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_replication_slots WHERE slot_name = 'debezium_slot') THEN
+    PERFORM pg_create_logical_replication_slot('debezium_slot', 'pgoutput');
+    RAISE NOTICE 'Created replication slot debezium_slot';
+  ELSE
+    RAISE NOTICE 'Replication slot debezium_slot already exists — skipping';
+  END IF;
+END
+\$\$;
+" && log_success "Logical replication slot 'debezium_slot' is ready" \
+   || { log_error "Failed to create replication slot"; exit 1; }
 
-if [[ "${SLOT_EXISTS}" -eq 0 ]]; then
-  run_psql -c "SELECT pg_create_logical_replication_slot('debezium_slot', 'pgoutput');" 2>&1 \
-    && log_success "Logical replication slot 'debezium_slot' created" \
-    || { log_error "Failed to create replication slot"; exit 1; }
-else
-  log_info "Replication slot 'debezium_slot' already exists — skipping"
-fi
-
-# ---- Step 5: Create publication for all tables ------------------------------
+# ---- Step 6: Create publication for all tables ------------------------------
 
 log_step "Creating publication 'debezium_publication' for all tables"
 
-PUB_EXISTS=$(run_psql -tAc "SELECT COUNT(*) FROM pg_publication WHERE pubname = 'debezium_publication';")
+run_sql "
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_publication WHERE pubname = 'debezium_publication') THEN
+    CREATE PUBLICATION debezium_publication FOR ALL TABLES;
+    RAISE NOTICE 'Created publication debezium_publication';
+  ELSE
+    RAISE NOTICE 'Publication debezium_publication already exists — skipping';
+  END IF;
+END
+\$\$;
+" && log_success "Publication 'debezium_publication' is ready" \
+   || { log_error "Failed to create publication"; exit 1; }
 
-if [[ "${PUB_EXISTS}" -eq 0 ]]; then
-  run_psql -c "CREATE PUBLICATION debezium_publication FOR ALL TABLES;" 2>&1 \
-    && log_success "Publication 'debezium_publication' created for all tables" \
-    || { log_error "Failed to create publication"; exit 1; }
-else
-  log_info "Publication 'debezium_publication' already exists — skipping"
-fi
+# =============================================================================
+# Cleanup staging files
+# =============================================================================
+
+log_info "Cleaning up GCS staging files"
+gcloud storage rm "${GCS_BUCKET}/chinook_schema.sql" "${GCS_BUCKET}/chinook_seed.sql" --quiet 2>&1 || true
 
 # =============================================================================
 # Summary
@@ -190,12 +234,3 @@ else
   exit 1
 fi
 echo "======================================================================="
-
-# Print table row counts for verification
-echo ""
-log_info "Table row counts:"
-run_psql -c "
-SELECT schemaname, relname AS table_name, n_live_tup AS row_count
-FROM pg_stat_user_tables
-ORDER BY relname;
-"
