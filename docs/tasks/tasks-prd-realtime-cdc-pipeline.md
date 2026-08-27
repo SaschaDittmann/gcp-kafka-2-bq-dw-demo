@@ -75,13 +75,13 @@
   - [x] 2.7 Add structured logging to `data/init_db.sh` (timestamped output for each step, exit codes on failure)
   - [x] 2.8 Document the database setup in `README.md` including the Chinook schema, how to connect to Cloud SQL, and how to re-initialize
 
-- [ ] 3.0 Google Managed Kafka Cluster & Topics (Complete Vertical Slice)
-  - [ ] 3.1 Define Managed Kafka cluster in `infra/kafka.tf` using `google_managed_kafka_cluster` (verify resource availability in `google` or `google-beta` provider via Context7); configure smallest available cluster size, `europe-west1`, VPC connectivity, and IAM authentication
-  - [ ] 3.2 Define Kafka topics in `infra/kafka.tf` using `google_managed_kafka_topic` for all 11 source tables following the naming convention `chinook.public.<table_name>` (e.g., `chinook.public.customer`, `chinook.public.invoice`, `chinook.public.track`, etc.); configure appropriate partition count (1 for demo) and replication factor
-  - [ ] 3.3 Add Kafka cluster ID, bootstrap server endpoint, and topic names to `infra/outputs.tf`
-  - [ ] 3.4 Write tests in `tests/test_infra_kafka.py`: validate Terraform plan includes the Kafka cluster and all 11 topics; verify topic naming convention matches Debezium defaults
-  - [ ] 3.5 Add labels and descriptions to all Kafka Terraform resources for observability
-  - [ ] 3.6 Document the Kafka cluster setup in `README.md` including topic naming convention, expected provisioning time (15–30 min), and how to verify cluster health
+- [x] 3.0 Google Managed Kafka Cluster & Topics (Complete Vertical Slice)
+  - [x] 3.1 Define Managed Kafka cluster in `infra/kafka.tf` using `google_managed_kafka_cluster` (verify resource availability in `google` or `google-beta` provider via Context7); configure smallest available cluster size, `europe-west1`, VPC connectivity, and IAM authentication
+  - [x] 3.2 Define Kafka topics in `infra/kafka.tf` using `google_managed_kafka_topic` for all 11 source tables following the naming convention `chinook.public.<table_name>` (e.g., `chinook.public.customer`, `chinook.public.invoice`, `chinook.public.track`, etc.); configure appropriate partition count (1 for demo) and replication factor
+  - [x] 3.3 Add Kafka cluster ID, bootstrap server endpoint, and topic names to `infra/outputs.tf`
+  - [x] 3.4 Write tests in `tests/test_infra_kafka.py`: validate Terraform plan includes the Kafka cluster and all 11 topics; verify topic naming convention matches Debezium defaults
+  - [x] 3.5 Add labels and descriptions to all Kafka Terraform resources for observability
+  - [x] 3.6 Document the Kafka cluster setup in `README.md` including topic naming convention, expected provisioning time (15–30 min), and how to verify cluster health
 
 - [ ] 4.0 Kafka Connect on Cloud Run — Debezium Source & BigQuery Sink (Complete Vertical Slice)
   - [ ] 4.1 Create `connect/Dockerfile` based on the official Kafka Connect image; install Debezium PostgreSQL Source Connector and BigQuery Kafka Sink Connector JARs into the plugin path; configure `CONNECT_BOOTSTRAP_SERVERS`, `CONNECT_GROUP_ID`, `CONNECT_KEY_CONVERTER`, `CONNECT_VALUE_CONVERTER` (JSON, no schema registry) via environment variables

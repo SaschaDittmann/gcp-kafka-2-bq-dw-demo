@@ -162,6 +162,47 @@ gcloud sql connect $(terraform output -raw cloudsql_instance_name) --user=$DB_US
 ./data/init_db.sh
 ```
 
+## Kafka Cluster (Google Managed Kafka)
+
+A Google Managed Service for Apache Kafka cluster handles CDC event streaming between Cloud SQL and BigQuery.
+
+**Cluster configuration:**
+- 3 vCPUs, 3 GiB memory (minimum size for demo)
+- VPC-attached via the pipeline subnet
+- IAM authentication (SASL/OAUTHBEARER) — no static credentials
+- Provisioning takes **15–30 minutes** on first `terraform apply`
+
+**Topic naming convention (Debezium):**
+
+| Topic Name | Source Table |
+|---|---|
+| `chinook.public.customer` | `customer` |
+| `chinook.public.employee` | `employee` |
+| `chinook.public.artist` | `artist` |
+| `chinook.public.album` | `album` |
+| `chinook.public.track` | `track` |
+| `chinook.public.genre` | `genre` |
+| `chinook.public.media_type` | `media_type` |
+| `chinook.public.invoice` | `invoice` |
+| `chinook.public.invoice_line` | `invoice_line` |
+| `chinook.public.playlist` | `playlist` |
+| `chinook.public.playlist_track` | `playlist_track` |
+
+Each topic has 1 partition and replication factor 3 (across availability zones).
+
+**Verifying cluster health:**
+
+```bash
+# Check cluster state
+gcloud managed-kafka clusters describe cdc-demo-kafka \
+  --location=europe-west1 --project=kafka-2-bq-streaming-demo
+
+# List topics
+gcloud managed-kafka topics list \
+  --cluster=cdc-demo-kafka --location=europe-west1 \
+  --project=kafka-2-bq-streaming-demo
+```
+
 ## Getting Started
 
 ### 1. Configure

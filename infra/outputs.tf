@@ -93,3 +93,22 @@ output "cloudsql_repl_password" {
   value       = random_password.db_repl_password.result
   sensitive   = true
 }
+
+# -----------------------------------------------------------------------------
+# Kafka
+# -----------------------------------------------------------------------------
+
+output "kafka_cluster_id" {
+  description = "The Managed Kafka cluster ID."
+  value       = google_managed_kafka_cluster.cluster.cluster_id
+}
+
+output "kafka_bootstrap_server" {
+  description = "The Kafka bootstrap server endpoint."
+  value       = "bootstrap.${google_managed_kafka_cluster.cluster.cluster_id}.${var.region}.managedkafka.${var.project_id}.cloud.goog:9092"
+}
+
+output "kafka_topic_names" {
+  description = "List of all Chinook CDC topic names."
+  value       = [for t in google_managed_kafka_topic.chinook : t.topic_id]
+}
