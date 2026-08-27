@@ -39,6 +39,11 @@ resource "google_managed_kafka_cluster" "cluster" {
 
   labels = local.common_labels
 
+  timeouts {
+    create = "2h"
+    delete = "1h"
+  }
+
   depends_on = [google_project_service.apis]
 }
 
