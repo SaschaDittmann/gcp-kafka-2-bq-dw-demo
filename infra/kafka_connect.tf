@@ -154,6 +154,12 @@ resource "google_managed_kafka_connector" "cdc_source" {
     "value.converter.schemas.enable" = "false"
   }
 
+  # Workaround: GCP auto-sets task_restart_policy; provider bug causes
+  # update_mask error when Terraform tries to reconcile it.
+  lifecycle {
+    ignore_changes = [task_restart_policy]
+  }
+
   timeouts {
     create = "30m"
     delete = "10m"

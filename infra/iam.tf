@@ -48,30 +48,30 @@ resource "google_project_iam_member" "kafka_connect_roles" {
 }
 
 # -----------------------------------------------------------------------------
-# Managed Kafka Service Agent — Cloud SQL access
-# The managed source connector uses the Managed Kafka SA (not our custom SA)
-# to connect to Cloud SQL with IAM authentication.
+# Managed Kafka Service Agent — roles for ALL connectors
+# The managed Connect cluster uses the Managed Kafka SA (not our custom SA)
+# for all API calls: Cloud SQL source, BigQuery sink, and GCS archive sink.
 # SA: service-PROJECT_NUMBER@gcp-sa-managedkafka.iam.gserviceaccount.com
 # -----------------------------------------------------------------------------
 
-resource "google_project_iam_member" "managed_kafka_cloudsql_client" {
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-managedkafka.iam.gserviceaccount.com"
+locals {
+  managed_kafka_sa = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-managedkafka.iam.gserviceaccount.com"
+
+  managed_kafka_roles = [
+    "roles/cloudsql.client",       # Connect to Cloud SQL (includes instances.get)
+    "roles/cloudsql.instanceUser", # IAM database authentication
+    "roles/cloudsql.viewer",       # connectSettings API (instances.get)
+    "roles/bigquery.dataEditor",   # Write records to BigQuery Bronze tables
+    "roles/bigquery.jobUser",      # Run BigQuery load and query jobs
+    "roles/storage.objectCreator", # Write CDC archive files to GCS
+  ]
 }
 
-resource "google_project_iam_member" "managed_kafka_cloudsql_user" {
-  project = var.project_id
-  role    = "roles/cloudsql.instanceUser"
-  member  = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-managedkafka.iam.gserviceaccount.com"
-}
-
-# The Cloud SQL JDBC socket factory calls the connectSettings API
-# which requires cloudsql.instances.get (not included in cloudsql.client)
-resource "google_project_iam_member" "managed_kafka_cloudsql_viewer" {
-  project = var.project_id
-  role    = "roles/cloudsql.viewer"
-  member  = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-managedkafka.iam.gserviceaccount.com"
+resource "google_project_iam_member" "managed_kafka_roles" {
+  for_each = toset(local.managed_kafka_roles)
+  project  = var.project_id
+  role     = each.key
+  member   = local.managed_kafka_sa
 }
 
 # Cloud SQL IAM database user for the Managed Kafka SA
