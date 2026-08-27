@@ -287,8 +287,9 @@ Three-layer **medallion architecture** for CDC data processing:
 ### 1. Configure
 
 ```bash
-cp .env.example .env
-# Edit .env with your GCP project ID, region, and other settings
+cd infra
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your GCP project ID and region
 ```
 
 ### 2. Provision Infrastructure
@@ -299,42 +300,174 @@ terraform init
 terraform apply
 ```
 
+> **Note:** The Managed Kafka cluster takes **15–30 minutes** to provision on first apply.
+> Cloud Run services will show "image not found" errors until `deploy.sh` builds the Docker image.
+
 ### 3. Deploy Pipeline
 
 ```bash
-# Build and push Kafka Connect image, initialize database, start Continuous Queries
 ./scripts/deploy.sh
+```
+
+This orchestrates the full post-Terraform deployment:
+
+| Step | Description | Duration |
+|------|-------------|----------|
+| 1 | Initialize Chinook database (schema, seed, replication) | ~2 min |
+| 2 | Build & push Kafka Connect Docker image via Cloud Build | ~5 min |
+| 3 | Update Cloud Run services with the new image | ~1 min |
+| 4 | Wait for Cloud Run services to become healthy | ~2 min |
+| 5 | Register Debezium source + BigQuery sink connectors | ~1 min |
+| 6 | Start 10 BigQuery Continuous Queries (5 Silver + 5 Gold) | ~1 min |
+
+**Skip flags** (useful for re-runs):
+```bash
+SKIP_DB_INIT=true ./scripts/deploy.sh       # Skip database initialization
+SKIP_IMAGE_BUILD=true ./scripts/deploy.sh   # Skip Docker image build
+SKIP_CQ_START=true ./scripts/deploy.sh      # Skip Continuous Query startup
 ```
 
 ### 4. Verify
 
-Insert, update, or delete rows in the PostgreSQL database and query BigQuery to see changes reflected in the Gold layer within ~60 seconds.
-
+**Check connector status:**
 ```bash
-# Connect to Cloud SQL
-gcloud sql connect <instance-name> --user=<replication-user> --database=<database>
+# Proxy into Cloud Run source service
+gcloud run services proxy cdc-demo-connect-source --region=europe-west1 --port=8083 &
 
-# Query BigQuery Gold layer
-bq query --use_legacy_sql=false 'SELECT * FROM gold.dim_customer WHERE is_active = TRUE LIMIT 10'
+# Check connectors
+curl http://localhost:8083/connectors
+curl http://localhost:8083/connectors/debezium-source/status | python3 -m json.tool
+```
+
+**Query BigQuery layers:**
+```bash
+# Bronze — raw CDC events
+bq query --use_legacy_sql=false \
+  'SELECT COUNT(*) as row_count FROM `bronze.customer_raw`'
+
+# Silver — current-state entities
+bq query --use_legacy_sql=false \
+  'SELECT customer_id, first_name, last_name, email
+   FROM `silver.customer`
+   WHERE is_deleted = FALSE
+   LIMIT 10'
+
+# Gold — star schema dimensions (Iceberg)
+bq query --use_legacy_sql=false \
+  'SELECT surrogate_key, first_name, last_name, city, country, is_active
+   FROM `gold.dim_customer`
+   WHERE is_active = TRUE
+   LIMIT 10'
+
+# Gold — fact tables
+bq query --use_legacy_sql=false \
+  'SELECT f.invoice_id, f.total, d.first_name, d.last_name
+   FROM `gold.fct_invoice` f
+   JOIN `gold.dim_customer` d ON f.customer_key = d.surrogate_key
+   WHERE d.is_active = TRUE
+   LIMIT 10'
+```
+
+**Test CDC by inserting a new customer:**
+```bash
+gcloud sql connect <instance-name> --user=admin --database=chinook
+
+-- In psql:
+INSERT INTO customer (customer_id, first_name, last_name, email)
+VALUES (100, 'Test', 'Customer', 'test@example.com');
+```
+
+Then check BigQuery within ~60 seconds:
+```bash
+bq query --use_legacy_sql=false \
+  'SELECT * FROM `silver.customer` WHERE customer_id = 100'
 ```
 
 ### 5. Teardown
 
 ```bash
-# Cancel Continuous Queries and clean up stateful resources
+# Step 1: Cancel Continuous Queries and clean up stateful resources
 ./scripts/teardown.sh
 
-# Destroy all infrastructure
+# Step 2: Destroy all infrastructure
 cd infra
 terraform destroy
 ```
 
-> **Important:** Always run `teardown.sh` before `terraform destroy` to avoid orphaned Continuous Queries and locked replication slots.
+> [!WARNING]
+> Always run `teardown.sh` before `terraform destroy` to avoid orphaned Continuous Queries and locked replication slots.
 
 ## Testing
 
 ```bash
 uv run pytest tests/ -v
+```
+
+| Test File | What It Validates |
+|---|---|
+| `test_deploy.py` | Deploy script structure, steps, prerequisites, CQ references |
+| `test_teardown.py` | Teardown script structure, CQ cancellation, slot cleanup |
+| `test_pii_masking.py` | No phone/fax columns in schemas, SMT exclusion config |
+| `test_cdc_pipeline.py` | E2E: insert/update/delete → Bronze/Silver/Gold (requires live pipeline) |
+| `test_scd2.py` | SCD Type 2 dimension correctness (requires live pipeline) |
+| `test_bigquery_schemas.py` | Dataset/table/column validation against Terraform |
+| `test_continuous_queries.py` | CQ SQL file structure, source/target references |
+| `test_connector_configs.py` | Connector JSON syntax, required fields, SMT config |
+| `test_infra_networking.py` | Terraform validate/plan for networking |
+| `test_infra_kafka.py` | Terraform plan for Kafka resources |
+| `test_database_init.py` | Database init script structure and content |
+
+## Troubleshooting
+
+### Cloud Run: "Image not found"
+
+The Docker image hasn't been built yet. Build it manually:
+```bash
+gcloud builds submit connect/ \
+  --tag=europe-west1-docker.pkg.dev/<project-id>/cdc-demo-docker/kafka-connect:latest
+```
+
+### Cloud Run: `deletion_protection` errors
+
+If Terraform can't destroy Cloud Run services:
+```bash
+cd infra
+terraform untaint google_cloud_run_v2_service.kafka_connect_source
+terraform untaint google_cloud_run_v2_service.kafka_connect_sink
+terraform apply --auto-approve
+```
+
+### Managed Kafka: Provisioning timeout
+
+Kafka clusters can take >1 hour. The Terraform timeout is set to 2 hours.
+If it times out, just re-run `terraform apply` — it will pick up where it left off.
+
+### BigQuery CQs: "Enterprise edition required"
+
+Continuous Queries require BigQuery Enterprise edition with slot reservations.
+Create a reservation with at least 10 slots:
+```bash
+bq mk --reservation --project_id=<project-id> --location=europe-west1 \
+  --slots=10 --edition=ENTERPRISE default
+bq mk --reservation_assignment --project_id=<project-id> --location=europe-west1 \
+  --reservation_id=default --job_type=CONTINUOUS --assignee_id=<project-id> \
+  --assignee_type=PROJECT
+```
+
+### Cloud Build: Permission denied
+
+Grant the Compute Engine default SA the required roles:
+```bash
+gcloud projects add-iam-policy-binding <project-id> \
+  --member="serviceAccount:<project-number>-compute@developer.gserviceaccount.com" \
+  --role="roles/storage.admin"
+```
+
+### Database: Re-initialize
+
+The init script is idempotent:
+```bash
+SKIP_IMAGE_BUILD=true SKIP_CQ_START=true ./scripts/deploy.sh
 ```
 
 ## Tech Stack
@@ -349,6 +482,7 @@ uv run pytest tests/ -v
 | In-Flight Processing | Kafka Connect SMTs (ReplaceField, Filter) |
 | Transformations | BigQuery Continuous Queries |
 | Data Warehouse | Google BigQuery (Bronze / Silver / Gold) |
+| Gold Table Format | Apache Iceberg (Managed) on GCS |
 | Infrastructure | Terraform (google / google-beta providers) |
 | Containerization | Cloud Build + Artifact Registry |
 | Testing | pytest |
@@ -356,3 +490,4 @@ uv run pytest tests/ -v
 ## License
 
 This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+
