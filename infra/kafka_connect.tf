@@ -129,7 +129,10 @@ resource "google_managed_kafka_connector" "cdc_source" {
 
     # Cloud SQL connection — uses Managed Kafka SA with IAM auth
     # The managed service connects as service-PROJECT_NUMBER@gcp-sa-managedkafka.iam
+    # database.hostname is required by Debezium's validator but overridden by
+    # the Cloud SQL socket factory (driver.cloudSqlInstance)
     "database.dbname"          = "chinook"
+    "database.hostname"        = "localhost"
     "driver.cloudSqlInstance"  = google_sql_database_instance.postgres.connection_name
     "driver.enableIamAuth"    = "true"
     "driver.ipTypes"          = "PRIVATE"
@@ -251,5 +254,10 @@ resource "google_managed_kafka_connector" "gcs_sink" {
   timeouts {
     create = "30m"
     delete = "10m"
+  }
+
+  # GCP auto-sets task_restart_policy; ignore it to avoid update_mask errors
+  lifecycle {
+    ignore_changes = [task_restart_policy]
   }
 }
