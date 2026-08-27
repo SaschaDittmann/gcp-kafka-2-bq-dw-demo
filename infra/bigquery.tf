@@ -430,7 +430,7 @@ resource "google_bigquery_table" "gold_dim_customer" {
     connection_id = google_bigquery_connection.iceberg.name
     file_format   = "PARQUET"
     table_format  = "ICEBERG"
-    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/dim_customer"
+    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/dim_customer/"
   }
 
   schema = jsonencode([
@@ -466,7 +466,7 @@ resource "google_bigquery_table" "gold_dim_track" {
     connection_id = google_bigquery_connection.iceberg.name
     file_format   = "PARQUET"
     table_format  = "ICEBERG"
-    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/dim_track"
+    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/dim_track/"
   }
 
   schema = jsonencode([
@@ -501,7 +501,7 @@ resource "google_bigquery_table" "gold_dim_employee" {
     connection_id = google_bigquery_connection.iceberg.name
     file_format   = "PARQUET"
     table_format  = "ICEBERG"
-    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/dim_employee"
+    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/dim_employee/"
   }
 
   schema = jsonencode([
@@ -539,7 +539,7 @@ resource "google_bigquery_table" "gold_fct_invoice" {
     connection_id = google_bigquery_connection.iceberg.name
     file_format   = "PARQUET"
     table_format  = "ICEBERG"
-    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/fct_invoice"
+    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/fct_invoice/"
   }
 
   schema = jsonencode([
@@ -569,7 +569,7 @@ resource "google_bigquery_table" "gold_fct_invoice_line" {
     connection_id = google_bigquery_connection.iceberg.name
     file_format   = "PARQUET"
     table_format  = "ICEBERG"
-    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/fct_invoice_line"
+    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/fct_invoice_line/"
   }
 
   schema = jsonencode([

@@ -81,9 +81,10 @@ locals {
 # =============================================================================
 
 resource "google_cloud_run_v2_service" "kafka_connect_source" {
-  name     = "${var.name_prefix}-connect-source"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  name                = "${var.name_prefix}-connect-source"
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  deletion_protection = false
 
   labels = merge(local.common_labels, {
     component = "kafka-connect-source"
@@ -141,9 +142,10 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
 # =============================================================================
 
 resource "google_cloud_run_v2_service" "kafka_connect_sink" {
-  name     = "${var.name_prefix}-connect-sink"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  name                = "${var.name_prefix}-connect-sink"
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  deletion_protection = false
 
   labels = merge(local.common_labels, {
     component = "kafka-connect-sink"
