@@ -3,11 +3,12 @@
 # Database Initialization Script
 # =============================================================================
 # Initializes the Chinook database on Cloud SQL for PostgreSQL:
-#   1. Uploads SQL files to GCS and imports schema + seed data via Cloud SQL
-#   2. Configures replication user, slot, and publication via gcloud sql connect
+#   1. Creates a GCS bucket for staging SQL files
+#   2. Imports Chinook schema and seed data via gcloud sql import sql
+#   3. Configures replication user, slot, and publication via gcloud sql import sql
 #
-# Uses `gcloud sql import sql` for schema/seed (no VPC access needed) and
-# `gcloud sql connect` for replication setup (PostgreSQL functions).
+# Uses `gcloud sql import sql` for all steps (via GCS staging).
+# No VPC access, psql, or Cloud SQL Auth Proxy needed.
 #
 # Usage:
 #   ./data/init_db.sh
@@ -74,11 +75,21 @@ log_success() {
 
 run_sql() {
   local sql="$1"
-  echo "${sql}" | gcloud sql connect "${INSTANCE_NAME}" \
-    --user="${DB_USER}" \
+  local label="${2:-inline}"
+  local tmp_file
+  tmp_file=$(mktemp /tmp/init_db_XXXXXX.sql)
+  echo "${sql}" > "${tmp_file}"
+
+  gcloud storage cp "${tmp_file}" "${GCS_BUCKET}/${label}.sql" --quiet 2>&1
+  rm -f "${tmp_file}"
+
+  gcloud sql import sql "${INSTANCE_NAME}" "${GCS_BUCKET}/${label}.sql" \
     --database="${DB_NAME}" \
+    --user="${DB_USER}" \
     --project="${PROJECT_ID}" \
     --quiet 2>&1
+
+  gcloud storage rm "${GCS_BUCKET}/${label}.sql" --quiet 2>&1 || true
 }
 
 # =============================================================================
@@ -160,7 +171,7 @@ gcloud sql import sql "${INSTANCE_NAME}" "${GCS_BUCKET}/chinook_seed.sql" \
 
 # ---- Step 4: Create replication user ----------------------------------------
 
-log_step "Creating replication user '${REPL_USER}' via gcloud sql connect"
+log_step "Creating replication user '${REPL_USER}' via Cloud SQL import"
 
 run_sql "
 DO \$\$
@@ -175,7 +186,7 @@ BEGIN
 END
 \$\$;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${REPL_USER};
-" && log_success "Replication user '${REPL_USER}' is ready" \
+" "repl_user" && log_success "Replication user '${REPL_USER}' is ready" \
    || { log_error "Failed to create replication user"; exit 1; }
 
 # ---- Step 5: Create logical replication slot --------------------------------
@@ -193,7 +204,7 @@ BEGIN
   END IF;
 END
 \$\$;
-" && log_success "Logical replication slot 'debezium_slot' is ready" \
+" "repl_slot" && log_success "Logical replication slot 'debezium_slot' is ready" \
    || { log_error "Failed to create replication slot"; exit 1; }
 
 # ---- Step 6: Create publication for all tables ------------------------------
@@ -211,7 +222,7 @@ BEGIN
   END IF;
 END
 \$\$;
-" && log_success "Publication 'debezium_publication' is ready" \
+" "publication" && log_success "Publication 'debezium_publication' is ready" \
    || { log_error "Failed to create publication"; exit 1; }
 
 # =============================================================================
