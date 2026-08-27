@@ -1,0 +1,32 @@
+{
+  "name": "bigquery-sink",
+  "config": {
+    "connector.class": "com.wepay.kafka.connect.bigquery.BigQuerySinkConnector",
+    "tasks.max": "1",
+
+    "topics.regex": "chinook\\.public\\..*",
+    "project": "${GCP_PROJECT_ID}",
+    "defaultDataset": "bronze",
+    "autoCreateTables": "true",
+    "autoUpdateSchemas": "true",
+
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false",
+
+    "consumer.override.security.protocol": "SASL_SSL",
+    "consumer.override.sasl.mechanism": "OAUTHBEARER",
+    "consumer.override.sasl.login.callback.handler.class": "com.google.cloud.hosted.kafka.auth.GcpLoginCallbackHandler",
+    "consumer.override.sasl.jaas.config": "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;",
+
+    "transforms": "dropSensitiveFields,filterTombstones",
+    "transforms.dropSensitiveFields.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
+    "transforms.dropSensitiveFields.exclude": "phone,fax",
+    "transforms.filterTombstones.type": "org.apache.kafka.connect.transforms.Filter",
+    "transforms.filterTombstones.predicate": "isTombstone",
+
+    "predicates": "isTombstone",
+    "predicates.isTombstone.type": "org.apache.kafka.connect.transforms.predicates.RecordIsTombstone"
+  }
+}

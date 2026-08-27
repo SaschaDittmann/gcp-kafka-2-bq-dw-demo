@@ -19,3 +19,4 @@ Key implementation details:
 - The `run_sql()` helper creates a temp file, uploads to GCS, imports, then cleans up.
 - Capture the import exit code **before** the cleanup command (`gcloud storage rm`), otherwise the cleanup masks failures.
 - The Cloud SQL service account needs `roles/storage.objectViewer` on the GCS bucket.
+

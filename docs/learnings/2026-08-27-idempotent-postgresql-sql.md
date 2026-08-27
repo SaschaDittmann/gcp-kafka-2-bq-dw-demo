@@ -16,3 +16,4 @@ Three patterns to make PostgreSQL SQL files safe for re-import:
 3. **Seed data**: Append `ON CONFLICT DO NOTHING` to each `INSERT ... VALUES` block. This silently skips rows with existing primary keys.
 4. **Indexes**: `CREATE INDEX IF NOT EXISTS` — built-in PostgreSQL support.
 5. **Replication/publication**: Wrap in `DO $$ ... IF NOT EXISTS ... END $$` PL/pgSQL blocks checking `pg_replication_slots`, `pg_publication`, and `pg_roles` system catalogs.
+

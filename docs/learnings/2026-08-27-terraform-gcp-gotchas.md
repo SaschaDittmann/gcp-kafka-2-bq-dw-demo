@@ -24,3 +24,4 @@ If the GCP organization has `compute.restrictVpcPeering` set to deny, Cloud SQL 
 
 ### 5. Managed Kafka uses `google-beta` provider
 `google_managed_kafka_cluster` and `google_managed_kafka_topic` require the `google-beta` provider. Set `provider = google-beta` explicitly on these resources.
+

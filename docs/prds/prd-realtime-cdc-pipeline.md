@@ -58,13 +58,16 @@ This is a **standalone pipeline** that operates independently from the existing 
 9. Build a custom Docker image based on the official Kafka Connect image, bundling:
    - Debezium PostgreSQL Source Connector
    - BigQuery Kafka Sink Connector
+   - Google Managed Kafka auth library (GcpLoginCallbackHandler) for SASL/OAUTHBEARER
 10. Build the Docker image using **Cloud Build** (`gcloud builds submit`) and push it to Artifact Registry. No local Docker daemon is required.
-11. Deploy the container to Cloud Run with:
-    - `CPU always allocated` mode
-    - `min-instances = 1` to prevent cold starts
-    - VPC connectivity (Serverless VPC Access or Direct VPC Egress) to reach Cloud SQL and Managed Kafka
+11. Deploy **two independent Cloud Run services** for production-like isolation and scalability:
+    - **Source service** (`connect-source`): Runs the Debezium CDC connector. Fixed at 1 instance (1 replication slot = 1 task). Lightweight: 1 CPU / 1 GiB.
+    - **Sink service** (`connect-sink`): Runs the BigQuery Sink connector. Scalable from 1 to 4 instances based on throughput. 2 CPU / 2 GiB per instance.
+    - Both services use `CPU always allocated` mode, VPC connectivity, and have independent `CONNECT_GROUP_ID` and internal topics for separate offset tracking.
 12. Use **JSON** as the serialization format (`value.converter=org.apache.kafka.connect.json.JsonConverter`). No schema registry is required.
-13. After the Kafka Connect container is running, register the Source and Sink connectors by POSTing their JSON configuration to the Kafka Connect REST API (`POST /connectors`).
+13. After both services are running, register connectors via their respective REST APIs:
+    - Source connector → source service (`POST /connectors`)
+    - Sink connector → sink service (`POST /connectors`)
 14. Configure the Debezium Source Connector to capture CDC events from all Chinook source tables.
 15. Configure the BigQuery Sink Connector to write CDC events to the Bronze layer tables.
 

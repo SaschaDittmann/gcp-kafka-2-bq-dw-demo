@@ -14,17 +14,20 @@ A reference implementation of an end-to-end, serverless streaming data pipeline 
         │                    │    │
         └──── Debezium ──────┘    └──── BQ Sink ────┐
               Source Connector         Connector     │
-              ┌────────────────────────────────┐     │
-              │    Kafka Connect on Cloud Run  │─────┘
-              │    (CPU always allocated)      │
-              └────────────────────────────────┘
+        ┌─────────────────┐    ┌─────────────────┐  │
+        │  Cloud Run      │    │  Cloud Run      │──┘
+        │  connect-source │    │  connect-sink   │
+        │  (1 instance)   │    │  (1-4 instances)│
+        └─────────────────┘    └─────────────────┘
 ```
 
 **Key components:**
 
 - **Cloud SQL for PostgreSQL** — OLTP source with logical decoding enabled for CDC
 - **Google Managed Service for Apache Kafka** — Central message broker with per-table topics
-- **Kafka Connect on Cloud Run** — Runs Debezium (source) and BigQuery Sink connectors in a custom Docker container
+- **Kafka Connect on Cloud Run (split architecture):**
+  - **Source service** — Debezium CDC connector, fixed at 1 instance (1 replication slot)
+  - **Sink service** — BigQuery Sink connector, scalable 1–4 instances
 - **BigQuery Continuous Queries** — Real-time transformations across three layers:
   - **Bronze** — Append-only raw CDC events (Debezium envelope)
   - **Silver** — Current-state entity tables with soft-delete handling
@@ -85,12 +88,12 @@ All services communicate over a private custom VPC — no public IP traffic for 
                           │          cdc-demo-vpc (custom)          │
                           │                                        │
   ┌────────────────┐      │  ┌──────────────┐  ┌───────────────┐   │
-  │   Cloud Run    │──────┼──│  VPC Access   │  │   Subnet      │   │
-  │ (Kafka Connect)│      │  │  Connector    │  │  10.0.1.0/24  │   │
-  └────────────────┘      │  │ 10.8.0.0/28  │  └───────┬───────┘   │
-                          │  └──────┬───────┘          │           │
-                          │         │                  │           │
-                          │         ▼                  ▼           │
+  │  Cloud Run     │──────┼──│  VPC Access   │  │   Subnet      │   │
+  │ connect-source │      │  │  Connector    │  │  10.0.1.0/24  │   │
+  ├────────────────┤      │  │ 10.8.0.0/28  │  └───────┬───────┘   │
+  │  Cloud Run     │──────┤  └──────┬───────┘          │           │
+  │ connect-sink   │      │         │                  │           │
+  └────────────────┘      │         ▼                  ▼           │
                           │  ┌──────────────┐  ┌───────────────┐   │
                           │  │  Cloud SQL   │  │ Managed Kafka │   │
                           │  │ (Private IP) │  │  (VPC-bound)  │   │
@@ -201,6 +204,48 @@ gcloud managed-kafka clusters describe cdc-demo-kafka \
 gcloud managed-kafka topics list \
   --cluster=cdc-demo-kafka --location=europe-west1 \
   --project=kafka-2-bq-streaming-demo
+```
+
+## Kafka Connect (Cloud Run — Split Architecture)
+
+Two independent Kafka Connect services run on Cloud Run for production-like isolation and scalability:
+
+| Service | Cloud Run Name | Scaling | Description |
+|---|---|---|---|
+| **Source** | `cdc-demo-connect-source` | Fixed: 1 instance | Debezium CDC from Cloud SQL → Kafka |
+| **Sink** | `cdc-demo-connect-sink` | 1–4 instances | Kafka → BigQuery bronze layer |
+
+**Why split?** The source connector is bound to a single PostgreSQL replication slot (can't parallelize), while the sink can scale independently based on throughput. Separate services provide independent failure domains, scaling, and deployment.
+
+**Docker image contents (`connect/Dockerfile`):**
+- Base: `confluentinc/cp-kafka-connect:7.7.1`
+- Debezium PostgreSQL Source Connector (v2.7.3.Final)
+- BigQuery Sink Connector (v2.6.3)
+- Google Managed Kafka auth library (v1.0.6) for SASL/OAUTHBEARER
+
+**SMT (Single Message Transforms) on the BigQuery Sink:**
+- `ReplaceField$Value` — drops `phone` and `fax` fields from all records
+- `Filter` with `RecordIsTombstone` predicate — filters out tombstone delete markers
+
+**Registering connectors:**
+
+```bash
+# Set env vars, then run:
+./connect/register-connectors.sh
+```
+
+**Verifying connector status:**
+
+```bash
+# Source service
+SOURCE_URL=$(gcloud run services describe cdc-demo-connect-source \
+  --region=europe-west1 --format="value(status.url)")
+curl ${SOURCE_URL}/connectors/debezium-source/status
+
+# Sink service
+SINK_URL=$(gcloud run services describe cdc-demo-connect-sink \
+  --region=europe-west1 --format="value(status.url)")
+curl ${SINK_URL}/connectors/bigquery-sink/status
 ```
 
 ## Getting Started
