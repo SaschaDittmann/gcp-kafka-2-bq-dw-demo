@@ -29,10 +29,6 @@ env/
 # uv
 .python-version
 
-# DuckDB
-*.duckdb
-*.duckdb.wal
-
 # Environment files
 .env
 .env.*
@@ -48,13 +44,14 @@ env/
 .DS_Store
 Thumbs.db
 
-# dbt
-transform/target/
-transform/dbt_packages/
-transform/logs/
+# Terraform plans
+*.tfplan
 
-# dlt
-.dlt/
+# Docker
+connect/plugins/*.jar
+
+# Script logs
+scripts/*.log
 
 # Jupyter
 .ipynb_checkpoints/

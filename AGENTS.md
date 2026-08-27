@@ -4,24 +4,27 @@
 
 This is a demo of a real-time streaming pipeline running on Google Cloud (GCP).
 The data source of this pipeline is a PostgreSQL database hosted by Cloud SQL.
-The data will be streamed by using Chance Data Capture (CDC) to a Google Managed Kafka Service, ingested to Google BigQuery, and transformed using BigQuery Continous Queries.
+The data will be streamed by using Change Data Capture (CDC) to a Google Managed Kafka Service, ingested to Google BigQuery, and transformed using BigQuery Continuous Queries.
 
 ## General Instructions
 
 - **Always read the PRD in `/docs/prds/`** at the start of a new conversation to understand the project's goals and constraints. Files follow the pattern `prd-<topic>.md`
 - **Check the tasks in `/docs/tasks/`** before starting a new task. Files follow the pattern `tasks-[prd-file-name].md`
 - **Always use Context7 MCP** to look up framework documentation before implementing. Do not rely solely on training data for API usage — libraries evolve and your knowledge may be outdated. Specifically:
-  - **Terraform:** Look up google_bigquery_dataset, and other GCP provider resources
-  - **BigQuery:** Look up SQL dialect differences from PostgreSQL/BigQuery. 
-  - **Kafka** Look up filter and transformation options
+  - **Terraform:** Look up google_bigquery_dataset, google_sql_database_instance, google_cloud_run_v2_service, and other GCP provider resources
+  - **BigQuery:** Look up SQL dialect differences from PostgreSQL/BigQuery and Continuous Query syntax
+  - **Kafka:** Look up Kafka Connect configuration, Debezium connector properties, and SMT options
+  - **Docker:** Look up Cloud Run container requirements and Artifact Registry push commands
 
 ## Project Structure
 
 ```
-transform/          # sql scripts for transformations within BigQuery
 infra/              # Terraform configurations for GCP
+connect/            # Kafka Connect Dockerfile and connector configs
+scripts/            # Deployment and teardown shell scripts
+transform/          # BigQuery Continuous Query SQL scripts
+data/               # SQL schema, seed data, and database initialization scripts
 tests/              # End-to-end and integration tests
-data/               # Local database assets
 docs/prds/          # Product Requirements Documents
 docs/tasks/         # Task breakdowns per feature
 docs/learnings/     # Documented solutions and patterns
@@ -31,10 +34,11 @@ docs/knowledge/     # Framework and library documentation (e.g., llms-full.txt f
 ## Tech Stack
 
 - **Data Sources** PostgreSQL hosted on Google Cloud SQL
-- **Ingestion:** Google Managed Kafka, Debezium for CDC
-- **Transformation:** BigQuery continuous queries
+- **Ingestion:** Google Managed Kafka, Debezium for CDC, Kafka Connect on Cloud Run
+- **Transformation:** BigQuery Continuous Queries
 - **Cloud Database:** Google BigQuery
 - **Infrastructure:** Terraform for GCP resource provisioning
+- **Containerization:** Cloud Build + Artifact Registry for Kafka Connect image
 - **Testing:** pytest for end-to-end tests
 
 ## Python Environment
@@ -58,7 +62,7 @@ docs/knowledge/     # Framework and library documentation (e.g., llms-full.txt f
 
 - Use pytest, not `unittest.TestCase`
 - Prefer end-to-end tests with real data over mocked tests
-- Test location mirrors source: `ingestion/pipeline.py` → `tests/test_pipeline.py`
+- Test location mirrors source: `scripts/deploy.sh` → `tests/test_deploy.py`
 - Minimum per component: 1 happy path + 1 edge case + 1 failure case
 - Use `@pytest.mark.parametrize` for multiple similar inputs
 - Run tests with: `uv run pytest tests/ -v`
