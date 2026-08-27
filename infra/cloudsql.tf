@@ -72,6 +72,12 @@ resource "google_sql_database_instance" "postgres" {
       value = "10"
     }
 
+    # Enable IAM database authentication for Managed Kafka Connect
+    database_flags {
+      name  = "cloudsql.iam_authentication"
+      value = "on"
+    }
+
     backup_configuration {
       enabled = false
     }
