@@ -45,20 +45,10 @@ RUN mkdir -p /usr/share/confluent-hub-components/bigquery-connector && \
 # Install Google Managed Kafka Auth Library
 # (Provides GcpLoginCallbackHandler for OAUTHBEARER authentication)
 # -----------------------------------------------------------------------------
-RUN mkdir -p /tmp/gmk-auth && \
-    mkdir -p /etc/kafka-connect/jars/ && \
+RUN mkdir -p /tmp/gmk-auth /etc/kafka-connect/jars/ && \
     curl -sL "https://github.com/googleapis/managedkafka/releases/download/v${MANAGED_KAFKA_AUTH_VERSION}/release-and-dependencies.zip" \
       -o /tmp/gmk-auth/release.zip && \
-    python3 -c "
-import zipfile, os, shutil
-z = zipfile.ZipFile('/tmp/gmk-auth/release.zip')
-for name in z.namelist():
-    if not name.endswith('/'):
-        data = z.read(name)
-        out = '/etc/kafka-connect/jars/' + os.path.basename(name)
-        open(out, 'wb').write(data)
-z.close()
-" && \
+    python3 -c "import zipfile,os; z=zipfile.ZipFile('/tmp/gmk-auth/release.zip'); [open('/etc/kafka-connect/jars/'+os.path.basename(n),'wb').write(z.read(n)) for n in z.namelist() if not n.endswith('/')]" && \
     rm -rf /tmp/gmk-auth
 
 # -----------------------------------------------------------------------------
