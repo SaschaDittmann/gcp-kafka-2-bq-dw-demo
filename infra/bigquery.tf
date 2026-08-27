@@ -136,40 +136,180 @@ resource "google_bigquery_table" "silver_employee" {
   ])
 }
 
-# --- artist ---
+# =============================================================================
+# Silver Layer Views — Reference/Lookup Tables (Non-Persistent)
+# =============================================================================
+# These tables change rarely (genre, media_type, artist, album, playlist,
+# playlist_track). Instead of running continuous CQs, we use views on Bronze
+# with QUALIFY ROW_NUMBER() to extract the latest state. This saves compute
+# while providing the same current-state interface.
+# =============================================================================
+
+# --- artist (view) ---
 resource "google_bigquery_table" "silver_artist" {
   dataset_id          = google_bigquery_dataset.silver.dataset_id
   table_id            = "artist"
-  description         = "Current-state artist records"
+  description         = "Current-state artist records (view on Bronze)"
   deletion_protection = false
   labels              = local.common_labels
 
-  schema = jsonencode([
-    { name = "artist_id",     type = "INTEGER",   mode = "REQUIRED" },
-    { name = "name",          type = "STRING",    mode = "NULLABLE" },
-    { name = "is_deleted",    type = "BOOLEAN",   mode = "REQUIRED" },
-    { name = "_loaded_at",    type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "_source_ts_ms", type = "INTEGER",   mode = "NULLABLE" },
-  ])
+  view {
+    query          = <<-SQL
+      SELECT
+        CAST(JSON_VALUE(after, '$.artist_id') AS INT64)  AS artist_id,
+        JSON_VALUE(after, '$.name')                      AS name,
+        IF(op = 'd', TRUE, FALSE)                        AS is_deleted,
+        _loaded_at,
+        ts_ms                                            AS _source_ts_ms
+      FROM `${var.project_id}.bronze.artist_raw`
+      QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY CAST(JSON_VALUE(after, '$.artist_id') AS INT64)
+        ORDER BY _loaded_at DESC, ts_ms DESC
+      ) = 1
+    SQL
+    use_legacy_sql = false
+  }
 }
 
-# --- album ---
+# --- album (view) ---
 resource "google_bigquery_table" "silver_album" {
   dataset_id          = google_bigquery_dataset.silver.dataset_id
   table_id            = "album"
-  description         = "Current-state album records"
+  description         = "Current-state album records (view on Bronze)"
   deletion_protection = false
   labels              = local.common_labels
 
-  schema = jsonencode([
-    { name = "album_id",      type = "INTEGER",   mode = "REQUIRED" },
-    { name = "title",         type = "STRING",    mode = "NULLABLE" },
-    { name = "artist_id",     type = "INTEGER",   mode = "NULLABLE" },
-    { name = "is_deleted",    type = "BOOLEAN",   mode = "REQUIRED" },
-    { name = "_loaded_at",    type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "_source_ts_ms", type = "INTEGER",   mode = "NULLABLE" },
-  ])
+  view {
+    query          = <<-SQL
+      SELECT
+        CAST(JSON_VALUE(after, '$.album_id') AS INT64)   AS album_id,
+        JSON_VALUE(after, '$.title')                     AS title,
+        CAST(JSON_VALUE(after, '$.artist_id') AS INT64)  AS artist_id,
+        IF(op = 'd', TRUE, FALSE)                        AS is_deleted,
+        _loaded_at,
+        ts_ms                                            AS _source_ts_ms
+      FROM `${var.project_id}.bronze.album_raw`
+      QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY CAST(JSON_VALUE(after, '$.album_id') AS INT64)
+        ORDER BY _loaded_at DESC, ts_ms DESC
+      ) = 1
+    SQL
+    use_legacy_sql = false
+  }
 }
+
+# --- genre (view) ---
+resource "google_bigquery_table" "silver_genre" {
+  dataset_id          = google_bigquery_dataset.silver.dataset_id
+  table_id            = "genre"
+  description         = "Current-state genre records (view on Bronze)"
+  deletion_protection = false
+  labels              = local.common_labels
+
+  view {
+    query          = <<-SQL
+      SELECT
+        CAST(JSON_VALUE(after, '$.genre_id') AS INT64)  AS genre_id,
+        JSON_VALUE(after, '$.name')                     AS name,
+        IF(op = 'd', TRUE, FALSE)                       AS is_deleted,
+        _loaded_at,
+        ts_ms                                           AS _source_ts_ms
+      FROM `${var.project_id}.bronze.genre_raw`
+      QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY CAST(JSON_VALUE(after, '$.genre_id') AS INT64)
+        ORDER BY _loaded_at DESC, ts_ms DESC
+      ) = 1
+    SQL
+    use_legacy_sql = false
+  }
+}
+
+# --- media_type (view) ---
+resource "google_bigquery_table" "silver_media_type" {
+  dataset_id          = google_bigquery_dataset.silver.dataset_id
+  table_id            = "media_type"
+  description         = "Current-state media type records (view on Bronze)"
+  deletion_protection = false
+  labels              = local.common_labels
+
+  view {
+    query          = <<-SQL
+      SELECT
+        CAST(JSON_VALUE(after, '$.media_type_id') AS INT64)  AS media_type_id,
+        JSON_VALUE(after, '$.name')                          AS name,
+        IF(op = 'd', TRUE, FALSE)                            AS is_deleted,
+        _loaded_at,
+        ts_ms                                                AS _source_ts_ms
+      FROM `${var.project_id}.bronze.media_type_raw`
+      QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY CAST(JSON_VALUE(after, '$.media_type_id') AS INT64)
+        ORDER BY _loaded_at DESC, ts_ms DESC
+      ) = 1
+    SQL
+    use_legacy_sql = false
+  }
+}
+
+# --- playlist (view) ---
+resource "google_bigquery_table" "silver_playlist" {
+  dataset_id          = google_bigquery_dataset.silver.dataset_id
+  table_id            = "playlist"
+  description         = "Current-state playlist records (view on Bronze)"
+  deletion_protection = false
+  labels              = local.common_labels
+
+  view {
+    query          = <<-SQL
+      SELECT
+        CAST(JSON_VALUE(after, '$.playlist_id') AS INT64)  AS playlist_id,
+        JSON_VALUE(after, '$.name')                        AS name,
+        IF(op = 'd', TRUE, FALSE)                          AS is_deleted,
+        _loaded_at,
+        ts_ms                                              AS _source_ts_ms
+      FROM `${var.project_id}.bronze.playlist_raw`
+      QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY CAST(JSON_VALUE(after, '$.playlist_id') AS INT64)
+        ORDER BY _loaded_at DESC, ts_ms DESC
+      ) = 1
+    SQL
+    use_legacy_sql = false
+  }
+}
+
+# --- playlist_track (view) ---
+resource "google_bigquery_table" "silver_playlist_track" {
+  dataset_id          = google_bigquery_dataset.silver.dataset_id
+  table_id            = "playlist_track"
+  description         = "Current-state playlist-track associations (view on Bronze)"
+  deletion_protection = false
+  labels              = local.common_labels
+
+  view {
+    query          = <<-SQL
+      SELECT
+        CAST(JSON_VALUE(after, '$.playlist_id') AS INT64)  AS playlist_id,
+        CAST(JSON_VALUE(after, '$.track_id') AS INT64)     AS track_id,
+        IF(op = 'd', TRUE, FALSE)                          AS is_deleted,
+        _loaded_at,
+        ts_ms                                              AS _source_ts_ms
+      FROM `${var.project_id}.bronze.playlist_track_raw`
+      QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY
+          CAST(JSON_VALUE(after, '$.playlist_id') AS INT64),
+          CAST(JSON_VALUE(after, '$.track_id') AS INT64)
+        ORDER BY _loaded_at DESC, ts_ms DESC
+      ) = 1
+    SQL
+    use_legacy_sql = false
+  }
+}
+
+# =============================================================================
+# Silver Layer Tables — Core Entity Tables (Persistent via CQ)
+# =============================================================================
+# These tables change frequently or feed Gold layer CQs as streaming sources.
+# They are populated by Continuous Queries from Bronze.
+# =============================================================================
 
 # --- track ---
 resource "google_bigquery_table" "silver_track" {
@@ -189,40 +329,6 @@ resource "google_bigquery_table" "silver_track" {
     { name = "milliseconds",  type = "INTEGER",   mode = "NULLABLE" },
     { name = "bytes",         type = "INTEGER",   mode = "NULLABLE" },
     { name = "unit_price",    type = "FLOAT",     mode = "NULLABLE" },
-    { name = "is_deleted",    type = "BOOLEAN",   mode = "REQUIRED" },
-    { name = "_loaded_at",    type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "_source_ts_ms", type = "INTEGER",   mode = "NULLABLE" },
-  ])
-}
-
-# --- genre ---
-resource "google_bigquery_table" "silver_genre" {
-  dataset_id          = google_bigquery_dataset.silver.dataset_id
-  table_id            = "genre"
-  description         = "Current-state genre records"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  schema = jsonencode([
-    { name = "genre_id",      type = "INTEGER",   mode = "REQUIRED" },
-    { name = "name",          type = "STRING",    mode = "NULLABLE" },
-    { name = "is_deleted",    type = "BOOLEAN",   mode = "REQUIRED" },
-    { name = "_loaded_at",    type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "_source_ts_ms", type = "INTEGER",   mode = "NULLABLE" },
-  ])
-}
-
-# --- media_type ---
-resource "google_bigquery_table" "silver_media_type" {
-  dataset_id          = google_bigquery_dataset.silver.dataset_id
-  table_id            = "media_type"
-  description         = "Current-state media type records"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  schema = jsonencode([
-    { name = "media_type_id", type = "INTEGER",   mode = "REQUIRED" },
-    { name = "name",          type = "STRING",    mode = "NULLABLE" },
     { name = "is_deleted",    type = "BOOLEAN",   mode = "REQUIRED" },
     { name = "_loaded_at",    type = "TIMESTAMP", mode = "REQUIRED" },
     { name = "_source_ts_ms", type = "INTEGER",   mode = "NULLABLE" },
@@ -273,39 +379,6 @@ resource "google_bigquery_table" "silver_invoice_line" {
   ])
 }
 
-# --- playlist ---
-resource "google_bigquery_table" "silver_playlist" {
-  dataset_id          = google_bigquery_dataset.silver.dataset_id
-  table_id            = "playlist"
-  description         = "Current-state playlist records"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  schema = jsonencode([
-    { name = "playlist_id",   type = "INTEGER",   mode = "REQUIRED" },
-    { name = "name",          type = "STRING",    mode = "NULLABLE" },
-    { name = "is_deleted",    type = "BOOLEAN",   mode = "REQUIRED" },
-    { name = "_loaded_at",    type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "_source_ts_ms", type = "INTEGER",   mode = "NULLABLE" },
-  ])
-}
-
-# --- playlist_track ---
-resource "google_bigquery_table" "silver_playlist_track" {
-  dataset_id          = google_bigquery_dataset.silver.dataset_id
-  table_id            = "playlist_track"
-  description         = "Current-state playlist-track association records"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  schema = jsonencode([
-    { name = "playlist_id",   type = "INTEGER",   mode = "REQUIRED" },
-    { name = "track_id",      type = "INTEGER",   mode = "REQUIRED" },
-    { name = "is_deleted",    type = "BOOLEAN",   mode = "REQUIRED" },
-    { name = "_loaded_at",    type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "_source_ts_ms", type = "INTEGER",   mode = "NULLABLE" },
-  ])
-}
 
 # =============================================================================
 # Gold Layer — Star Schema (Managed Apache Iceberg Tables)

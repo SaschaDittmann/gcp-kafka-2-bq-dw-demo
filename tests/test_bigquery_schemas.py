@@ -185,7 +185,25 @@ def test_bronze_table_count(bigquery_tf):
 def test_silver_table_count(bigquery_tf):
     silver_count = bigquery_tf.count('google_bigquery_dataset.silver.dataset_id')
     assert silver_count == 11, (
-        f"Expected 11 Silver tables, found {silver_count} references"
+        f"Expected 11 Silver tables/views, found {silver_count} references"
+    )
+
+
+def test_silver_views_count(bigquery_tf):
+    view_count = bigquery_tf.count('use_legacy_sql = false')
+    assert view_count >= 6, (
+        f"Expected at least 6 Silver views (reference tables), found {view_count}"
+    )
+
+
+SILVER_VIEW_TABLES = ["artist", "album", "genre", "media_type", "playlist", "playlist_track"]
+
+
+@pytest.mark.parametrize("table", SILVER_VIEW_TABLES)
+def test_silver_view_uses_qualify(bigquery_tf, table):
+    # Each view should use QUALIFY ROW_NUMBER() for deduplication
+    assert "QUALIFY ROW_NUMBER()" in bigquery_tf, (
+        "Silver views must use QUALIFY ROW_NUMBER() for current-state dedup"
     )
 
 

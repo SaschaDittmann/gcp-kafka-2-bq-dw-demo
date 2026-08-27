@@ -265,10 +265,10 @@ Three-layer **medallion architecture** for CDC data processing:
 **Bronze layer** (`bronze` dataset) — 11 `*_raw` tables with Debezium envelope columns:
 `before`, `after` (JSON), `op` (c/u/d/r), `ts_ms`, `source`
 
-**Silver layer** (`silver` dataset) — 11 entity tables with typed columns, plus:
-- `is_deleted` — soft-delete flag (TRUE when `op='d'`)
-- `_loaded_at` — BigQuery ingestion timestamp
-- `_source_ts_ms` — Debezium source timestamp
+**Silver layer** (`silver` dataset) — hybrid approach:
+- **5 persistent tables** (customer, employee, track, invoice, invoice_line) — populated by CQs, used as Gold CQ streaming sources
+- **6 views on Bronze** (artist, album, genre, media_type, playlist, playlist_track) — reference/lookup data that rarely changes, uses `QUALIFY ROW_NUMBER()` for current-state dedup without CQ overhead
+- All expose: `is_deleted`, `_loaded_at`, `_source_ts_ms`
 
 **Gold layer** (`gold` dataset) — **Managed Apache Iceberg** tables (Parquet on GCS):
 - **Dimensions (SCD Type 2):** `dim_customer`, `dim_track` (denormalized with album/artist/genre/media_type), `dim_employee`
@@ -277,8 +277,9 @@ Three-layer **medallion architecture** for CDC data processing:
 - **Interoperability:** Data stored as Parquet in GCS (`gs://<project>-iceberg-gold/`) — queryable by Spark, Trino, Flink, or any Iceberg-compatible engine
 
 **Continuous Queries** (`transform/*.sql`) — Launched via `bq query --continuous=true`:
+- **5 Bronze → Silver CQs** for core entities (reference tables use views instead)
+- **5 Silver → Gold CQs** for dimensions and facts
 - BigQuery CQs are **INSERT-only** using `APPENDS()` — no MERGE support
-- Silver tables are append-only event logs; current-state views use `QUALIFY ROW_NUMBER()`
 - Requires BigQuery **Enterprise edition** with slot reservations
 
 ## Getting Started

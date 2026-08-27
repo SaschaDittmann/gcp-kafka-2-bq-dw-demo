@@ -34,16 +34,13 @@ def load_sql(filename):
 SILVER_CQ_FILES = [
     "silver_customer.sql",
     "silver_employee.sql",
-    "silver_artist.sql",
-    "silver_album.sql",
     "silver_track.sql",
-    "silver_genre.sql",
-    "silver_media_type.sql",
     "silver_invoice.sql",
     "silver_invoice_line.sql",
-    "silver_playlist.sql",
-    "silver_playlist_track.sql",
 ]
+
+# Reference/lookup tables use views on Bronze (no CQ scripts needed):
+# artist, album, genre, media_type, playlist, playlist_track
 
 
 @pytest.mark.parametrize("filename", SILVER_CQ_FILES)
@@ -78,15 +75,9 @@ def test_gold_cq_file_exists(filename):
 SILVER_CQ_TABLE_MAP = {
     "silver_customer.sql":       ("bronze.customer_raw",       "silver.customer"),
     "silver_employee.sql":       ("bronze.employee_raw",       "silver.employee"),
-    "silver_artist.sql":         ("bronze.artist_raw",         "silver.artist"),
-    "silver_album.sql":          ("bronze.album_raw",          "silver.album"),
     "silver_track.sql":          ("bronze.track_raw",          "silver.track"),
-    "silver_genre.sql":          ("bronze.genre_raw",          "silver.genre"),
-    "silver_media_type.sql":     ("bronze.media_type_raw",     "silver.media_type"),
     "silver_invoice.sql":        ("bronze.invoice_raw",        "silver.invoice"),
     "silver_invoice_line.sql":   ("bronze.invoice_line_raw",   "silver.invoice_line"),
-    "silver_playlist.sql":       ("bronze.playlist_raw",       "silver.playlist"),
-    "silver_playlist_track.sql": ("bronze.playlist_track_raw", "silver.playlist_track"),
 }
 
 
