@@ -15,3 +15,4 @@ FROM APPENDS(
   TABLE `${PROJECT_ID}.bronze.media_type_raw`,
   CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE
 );
+

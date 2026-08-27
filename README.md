@@ -256,9 +256,9 @@ Three-layer **medallion architecture** for CDC data processing:
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │     Bronze      │     │     Silver      │     │      Gold       │
 │  (Raw CDC)      │────▶│  (Current State)│────▶│  (Star Schema)  │
-│                 │ CQ  │                 │ CQ  │                 │
+│                 │ CQ  │                 │ CQ  │  Apache Iceberg │
 │  11 tables      │     │  11 tables      │     │  3 dims + 2 fct │
-│  Debezium JSON  │     │  Typed columns  │     │  SCD2 + lookups │
+│  Debezium JSON  │     │  Typed columns  │     │  Parquet on GCS │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
@@ -270,10 +270,11 @@ Three-layer **medallion architecture** for CDC data processing:
 - `_loaded_at` — BigQuery ingestion timestamp
 - `_source_ts_ms` — Debezium source timestamp
 
-**Gold layer** (`gold` dataset):
+**Gold layer** (`gold` dataset) — **Managed Apache Iceberg** tables (Parquet on GCS):
 - **Dimensions (SCD Type 2):** `dim_customer`, `dim_track` (denormalized with album/artist/genre/media_type), `dim_employee`
   - Each change creates a new row with `surrogate_key` (UUID), `valid_from`, `valid_to`, `is_active`
 - **Facts:** `fct_invoice`, `fct_invoice_line` with surrogate key references and computed `line_total`
+- **Interoperability:** Data stored as Parquet in GCS (`gs://<project>-iceberg-gold/`) — queryable by Spark, Trino, Flink, or any Iceberg-compatible engine
 
 **Continuous Queries** (`transform/*.sql`) — Launched via `bq query --continuous=true`:
 - BigQuery CQs are **INSERT-only** using `APPENDS()` — no MERGE support

@@ -258,3 +258,4 @@ def test_fct_invoice_line_computes_line_total():
     assert "line_total" in sql, (
         "fct_invoice_line must compute line_total"
     )
+

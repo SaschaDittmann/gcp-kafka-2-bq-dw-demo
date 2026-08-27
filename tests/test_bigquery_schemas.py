@@ -194,3 +194,52 @@ def test_gold_table_count(bigquery_tf):
     assert gold_count == 5, (
         f"Expected 5 Gold tables (3 dims + 2 facts), found {gold_count} references"
     )
+
+
+# =========================================================================
+# Happy Path: Gold tables use Managed Iceberg format
+# =========================================================================
+
+def test_gold_tables_have_biglake_configuration(bigquery_tf):
+    biglake_count = bigquery_tf.count("biglake_configuration")
+    assert biglake_count >= 5, (
+        f"Expected at least 5 biglake_configuration blocks (one per Gold table), "
+        f"found {biglake_count}"
+    )
+
+
+def test_gold_tables_use_parquet_format(bigquery_tf):
+    assert 'file_format   = "PARQUET"' in bigquery_tf, (
+        "Gold Iceberg tables must use PARQUET file format"
+    )
+
+
+def test_gold_tables_use_iceberg_table_format(bigquery_tf):
+    assert 'table_format  = "ICEBERG"' in bigquery_tf, (
+        "Gold tables must use ICEBERG table format"
+    )
+
+
+def test_iceberg_gcs_bucket_exists(bigquery_tf):
+    assert "google_storage_bucket" in bigquery_tf, (
+        "A GCS bucket must be defined for Iceberg data storage"
+    )
+    assert "iceberg" in bigquery_tf.lower(), (
+        "The GCS bucket should be named for Iceberg"
+    )
+
+
+def test_iceberg_bigquery_connection_exists(bigquery_tf):
+    assert "google_bigquery_connection" in bigquery_tf, (
+        "A BigQuery connection must be defined for Iceberg tables"
+    )
+
+
+def test_iceberg_connection_iam(bigquery_tf):
+    assert "google_storage_bucket_iam_member" in bigquery_tf, (
+        "The BQ connection service account must have IAM on the Iceberg bucket"
+    )
+    assert "roles/storage.objectAdmin" in bigquery_tf, (
+        "The connection SA needs roles/storage.objectAdmin on the bucket"
+    )
+

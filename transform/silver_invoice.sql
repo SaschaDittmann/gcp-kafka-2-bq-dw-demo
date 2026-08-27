@@ -25,3 +25,4 @@ FROM APPENDS(
   TABLE `${PROJECT_ID}.bronze.invoice_raw`,
   CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE
 );
+

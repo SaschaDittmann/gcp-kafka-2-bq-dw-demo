@@ -15,3 +15,4 @@ FROM APPENDS(
   TABLE `${PROJECT_ID}.bronze.playlist_track_raw`,
   CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE
 );
+

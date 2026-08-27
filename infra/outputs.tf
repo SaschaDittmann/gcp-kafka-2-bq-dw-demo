@@ -163,3 +163,13 @@ output "bigquery_datasets" {
     gold   = google_bigquery_dataset.gold.dataset_id
   }
 }
+
+output "iceberg_bucket" {
+  description = "The GCS bucket for Gold layer Iceberg data."
+  value       = google_storage_bucket.iceberg_data.name
+}
+
+output "iceberg_connection" {
+  description = "The BigQuery connection for Iceberg tables."
+  value       = google_bigquery_connection.iceberg.name
+}

@@ -72,6 +72,7 @@ locals {
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "bigquery.googleapis.com",
+    "bigqueryconnection.googleapis.com",
     "iam.googleapis.com",
   ]
 }

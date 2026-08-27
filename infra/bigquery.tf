@@ -308,16 +308,57 @@ resource "google_bigquery_table" "silver_playlist_track" {
 }
 
 # =============================================================================
-# Gold Layer — Star Schema
+# Gold Layer — Star Schema (Managed Apache Iceberg Tables)
+# =============================================================================
+# Gold tables use BigQuery Managed Iceberg format, storing data as Parquet
+# in a customer-owned GCS bucket. This enables interoperability with any
+# engine that supports Apache Iceberg (Spark, Trino, Flink, etc.)
 # =============================================================================
 
-# --- dim_customer (SCD Type 2) ---
+# --- GCS Bucket for Iceberg Data ---
+resource "google_storage_bucket" "iceberg_data" {
+  name          = "${var.project_id}-iceberg-gold"
+  location      = var.region
+  force_destroy = true
+  labels        = local.common_labels
+
+  uniform_bucket_level_access = true
+
+  depends_on = [google_project_service.apis]
+}
+
+# --- BigQuery Connection for Cloud Storage Access ---
+resource "google_bigquery_connection" "iceberg" {
+  connection_id = "iceberg-gold-connection"
+  location      = var.region
+  description   = "Connection for Gold layer Managed Iceberg tables"
+
+  cloud_resource {}
+
+  depends_on = [google_project_service.apis]
+}
+
+# --- IAM: Grant BQ Connection SA access to the Iceberg bucket ---
+resource "google_storage_bucket_iam_member" "iceberg_connection" {
+  bucket = google_storage_bucket.iceberg_data.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_bigquery_connection.iceberg.cloud_resource[0].service_account_id}"
+}
+
+# --- dim_customer (SCD Type 2, Iceberg) ---
 resource "google_bigquery_table" "gold_dim_customer" {
   dataset_id          = google_bigquery_dataset.gold.dataset_id
   table_id            = "dim_customer"
-  description         = "Customer dimension with SCD Type 2 history"
+  description         = "Customer dimension with SCD Type 2 history (Managed Iceberg)"
   deletion_protection = false
   labels              = local.common_labels
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/dim_customer"
+  }
 
   schema = jsonencode([
     { name = "surrogate_key", type = "STRING",    mode = "REQUIRED", description = "Unique row key (UUID)" },
@@ -340,13 +381,20 @@ resource "google_bigquery_table" "gold_dim_customer" {
   ])
 }
 
-# --- dim_track (SCD Type 2, denormalized with album/artist/genre/media_type) ---
+# --- dim_track (SCD Type 2, denormalized, Iceberg) ---
 resource "google_bigquery_table" "gold_dim_track" {
   dataset_id          = google_bigquery_dataset.gold.dataset_id
   table_id            = "dim_track"
-  description         = "Track dimension denormalized with album, artist, genre, media type (SCD2)"
+  description         = "Track dimension denormalized with album, artist, genre, media type (SCD2, Iceberg)"
   deletion_protection = false
   labels              = local.common_labels
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/dim_track"
+  }
 
   schema = jsonencode([
     { name = "surrogate_key",   type = "STRING",    mode = "REQUIRED" },
@@ -368,13 +416,20 @@ resource "google_bigquery_table" "gold_dim_track" {
   ])
 }
 
-# --- dim_employee (SCD Type 2) ---
+# --- dim_employee (SCD Type 2, Iceberg) ---
 resource "google_bigquery_table" "gold_dim_employee" {
   dataset_id          = google_bigquery_dataset.gold.dataset_id
   table_id            = "dim_employee"
-  description         = "Employee dimension with SCD Type 2 history"
+  description         = "Employee dimension with SCD Type 2 history (Managed Iceberg)"
   deletion_protection = false
   labels              = local.common_labels
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/dim_employee"
+  }
 
   schema = jsonencode([
     { name = "surrogate_key", type = "STRING",    mode = "REQUIRED" },
@@ -399,13 +454,20 @@ resource "google_bigquery_table" "gold_dim_employee" {
   ])
 }
 
-# --- fct_invoice ---
+# --- fct_invoice (Iceberg) ---
 resource "google_bigquery_table" "gold_fct_invoice" {
   dataset_id          = google_bigquery_dataset.gold.dataset_id
   table_id            = "fct_invoice"
-  description         = "Invoice fact table with surrogate key references to dimensions"
+  description         = "Invoice fact table with surrogate key references (Managed Iceberg)"
   deletion_protection = false
   labels              = local.common_labels
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/fct_invoice"
+  }
 
   schema = jsonencode([
     { name = "invoice_id",          type = "INTEGER",   mode = "REQUIRED" },
@@ -422,13 +484,20 @@ resource "google_bigquery_table" "gold_fct_invoice" {
   ])
 }
 
-# --- fct_invoice_line ---
+# --- fct_invoice_line (Iceberg) ---
 resource "google_bigquery_table" "gold_fct_invoice_line" {
   dataset_id          = google_bigquery_dataset.gold.dataset_id
   table_id            = "fct_invoice_line"
-  description         = "Invoice line fact table with surrogate key references"
+  description         = "Invoice line fact table with surrogate key references (Managed Iceberg)"
   deletion_protection = false
   labels              = local.common_labels
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+    storage_uri   = "gs://${google_storage_bucket.iceberg_data.name}/fct_invoice_line"
+  }
 
   schema = jsonencode([
     { name = "invoice_line_id", type = "INTEGER",   mode = "REQUIRED" },
