@@ -76,6 +76,7 @@ log_success() {
 run_sql() {
   local sql="$1"
   local label="${2:-inline}"
+  local user="${3:-${DB_USER}}"
   local tmp_file
   tmp_file=$(mktemp /tmp/init_db_XXXXXX.sql)
   echo "${sql}" > "${tmp_file}"
@@ -83,13 +84,16 @@ run_sql() {
   gcloud storage cp "${tmp_file}" "${GCS_BUCKET}/${label}.sql" --quiet 2>&1
   rm -f "${tmp_file}"
 
+  local import_rc=0
   gcloud sql import sql "${INSTANCE_NAME}" "${GCS_BUCKET}/${label}.sql" \
     --database="${DB_NAME}" \
-    --user="${DB_USER}" \
+    --user="${user}" \
     --project="${PROJECT_ID}" \
-    --quiet 2>&1
+    --quiet 2>&1 || import_rc=$?
 
   gcloud storage rm "${GCS_BUCKET}/${label}.sql" --quiet 2>&1 || true
+
+  return "${import_rc}"
 }
 
 # =============================================================================
@@ -204,7 +208,7 @@ BEGIN
   END IF;
 END
 \$\$;
-" "repl_slot" && log_success "Logical replication slot 'debezium_slot' is ready" \
+" "repl_slot" "${REPL_USER}" && log_success "Logical replication slot 'debezium_slot' is ready" \
    || { log_error "Failed to create replication slot"; exit 1; }
 
 # ---- Step 6: Create publication for all tables ------------------------------
