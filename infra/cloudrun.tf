@@ -114,8 +114,19 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
         cpu_idle = false
         limits = {
           cpu    = "1"
-          memory = "1Gi"
+          memory = "2Gi"
         }
+      }
+
+      startup_probe {
+        http_get {
+          path = "/connectors"
+          port = 8080
+        }
+        initial_delay_seconds = 30
+        period_seconds        = 10
+        failure_threshold     = 24  # 30 + (24 * 10) = 270s max
+        timeout_seconds       = 5
       }
 
       dynamic "env" {
@@ -177,6 +188,17 @@ resource "google_cloud_run_v2_service" "kafka_connect_sink" {
           cpu    = "2"
           memory = "2Gi"
         }
+      }
+
+      startup_probe {
+        http_get {
+          path = "/connectors"
+          port = 8080
+        }
+        initial_delay_seconds = 30
+        period_seconds        = 10
+        failure_threshold     = 24  # 30 + (24 * 10) = 270s max
+        timeout_seconds       = 5
       }
 
       dynamic "env" {
