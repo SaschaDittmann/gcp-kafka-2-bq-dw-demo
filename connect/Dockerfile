@@ -17,7 +17,7 @@ FROM confluentinc/cp-kafka-connect:7.7.1
 
 # Connector versions
 ENV DEBEZIUM_VERSION=2.5.4.Final
-ENV BQ_CONNECTOR_VERSION=2.6.3
+ENV BQ_CONNECTOR_VERSION=2.14.0
 ENV MANAGED_KAFKA_AUTH_VERSION=1.0.6
 
 # -----------------------------------------------------------------------------
@@ -31,10 +31,15 @@ RUN mkdir -p /usr/share/confluent-hub-components/debezium-connector-postgresql &
     rm /tmp/debezium.tar.gz
 
 # -----------------------------------------------------------------------------
-# Install BigQuery Sink Connector (from Confluent Hub)
+# Install BigQuery Sink Connector (from Aiven open-source fork)
+# The original wepay connector is deprecated; Aiven maintains the active fork.
+# confluent-hub is unreliable from Cloud Build, so we download directly.
 # -----------------------------------------------------------------------------
-RUN confluent-hub install --no-prompt \
-    wepay/kafka-connect-bigquery:${BQ_CONNECTOR_VERSION}
+RUN mkdir -p /usr/share/confluent-hub-components/bigquery-connector && \
+    curl -sL "https://github.com/Aiven-Open/bigquery-connector-for-apache-kafka/releases/download/v${BQ_CONNECTOR_VERSION}/bigquery-connector-for-apache-kafka-${BQ_CONNECTOR_VERSION}.tar" \
+      -o /tmp/bq-connector.tar && \
+    tar -xf /tmp/bq-connector.tar -C /usr/share/confluent-hub-components/bigquery-connector/ && \
+    rm /tmp/bq-connector.tar
 
 # -----------------------------------------------------------------------------
 # Install Google Managed Kafka Auth Library
