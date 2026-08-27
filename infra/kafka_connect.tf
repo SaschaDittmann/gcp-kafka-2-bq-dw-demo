@@ -133,7 +133,7 @@ resource "google_managed_kafka_connector" "cdc_source" {
     "database.dbname"          = "chinook"
     "driver.cloudSqlInstance"  = google_sql_database_instance.postgres.connection_name
     "driver.enableIamAuth"    = "true"
-    "driver.ipTypes"          = "PRIVATE"
+    "driver.ipTypes"          = "PRIVATE,PUBLIC"
     "driver.sslmode"          = "disable"
 
     # CDC configuration
