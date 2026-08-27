@@ -32,15 +32,13 @@ INSERT INTO genre (genre_id, name) VALUES
     (22, 'Comedy'),
     (23, 'Alternative'),
     (24, 'Classical'),
-    (25, 'Opera');
-
+    (25, 'Opera') ON CONFLICT DO NOTHING;
 INSERT INTO media_type (media_type_id, name) VALUES
     (1, 'MPEG audio file'),
     (2, 'Protected AAC audio file'),
     (3, 'Protected MPEG-4 video file'),
     (4, 'Purchased AAC audio file'),
-    (5, 'AAC audio file');
-
+    (5, 'AAC audio file') ON CONFLICT DO NOTHING;
 INSERT INTO artist (artist_id, name) VALUES
     (1, 'AC/DC'),
     (2, 'Accept'),
@@ -316,8 +314,7 @@ INSERT INTO artist (artist_id, name) VALUES
     (272, 'Emerson String Quartet'),
     (273, 'C. Monteverdi, Nigel Rogers - Chiaroscuro; London Baroque; London Cornett & Sackbu'),
     (274, 'Nash Ensemble'),
-    (275, 'Philip Glass Ensemble');
-
+    (275, 'Philip Glass Ensemble') ON CONFLICT DO NOTHING;
 INSERT INTO album (album_id, title, artist_id) VALUES
     (1, 'For Those About To Rock We Salute You', 1),
     (2, 'Balls to the Wall', 2),
@@ -665,8 +662,7 @@ INSERT INTO album (album_id, title, artist_id) VALUES
     (344, 'Schubert: The Late String Quartets & String Quintet (3 CD''s)', 272),
     (345, 'Monteverdi: L''Orfeo', 273),
     (346, 'Mozart: Chamber Music', 274),
-    (347, 'Koyaanisqatsi (Soundtrack from the Motion Picture)', 275);
-
+    (347, 'Koyaanisqatsi (Soundtrack from the Motion Picture)', 275) ON CONFLICT DO NOTHING;
 INSERT INTO track (track_id, name, album_id, media_type_id, genre_id, composer, milliseconds, bytes, unit_price) VALUES
     (1, 'For Those About To Rock (We Salute You)', 1, 1, 1, 'Angus Young, Malcolm Young, Brian Johnson', 343719, 11170334, 0.99),
     (2, 'Balls to the Wall', 2, 2, 1, 'U. Dirkschneider, W. Hoffmann, H. Frank, P. Baltes, S. Kaufmann, G. Hoffmann', 342562, 5510424, 0.99),
@@ -1667,8 +1663,7 @@ INSERT INTO track (track_id, name, album_id, media_type_id, genre_id, composer, 
     (997, 'The Deepest Blues Are Black', 79, 1, 1, 'Dave Grohl, Taylor Hawkins, Nate Mendel, Chris Shiflett', 238419, 7735473, 0.99),
     (998, 'End Over End', 79, 1, 1, 'Dave Grohl, Taylor Hawkins, Nate Mendel, Chris Shiflett', 352078, 11395296, 0.99),
     (999, 'Still', 80, 1, 1, 'Dave Grohl, Taylor Hawkins, Nate Mendel, Chris Shiflett/FOO FIGHTERS', 313182, 10323157, 0.99),
-    (1000, 'What If I Do?', 80, 1, 1, 'Dave Grohl, Taylor Hawkins, Nate Mendel, Chris Shiflett/FOO FIGHTERS', 302994, 9929799, 0.99);
-
+    (1000, 'What If I Do?', 80, 1, 1, 'Dave Grohl, Taylor Hawkins, Nate Mendel, Chris Shiflett/FOO FIGHTERS', 302994, 9929799, 0.99) ON CONFLICT DO NOTHING;
 INSERT INTO track (track_id, name, album_id, media_type_id, genre_id, composer, milliseconds, bytes, unit_price) VALUES
     (1001, 'Miracle', 80, 1, 1, 'Dave Grohl, Taylor Hawkins, Nate Mendel, Chris Shiflett/FOO FIGHTERS', 209684, 6877994, 0.99),
     (1002, 'Another Round', 80, 1, 1, 'Dave Grohl, Taylor Hawkins, Nate Mendel, Chris Shiflett/FOO FIGHTERS', 265848, 8752670, 0.99),
@@ -2669,8 +2664,7 @@ INSERT INTO track (track_id, name, album_id, media_type_id, genre_id, composer, 
     (1997, 'Milk It', 163, 1, 1, 'Kurt Cobain', 225724, 7406945, 0.99),
     (1998, 'Negative Creep', 163, 1, 1, 'Kurt Cobain', 163761, 5354854, 0.99),
     (1999, 'Polly', 163, 1, 1, 'Kurt Cobain', 149995, 4885331, 0.99),
-    (2000, 'Breed', 163, 1, 1, 'Kurt Cobain', 208378, 6759080, 0.99);
-
+    (2000, 'Breed', 163, 1, 1, 'Kurt Cobain', 208378, 6759080, 0.99) ON CONFLICT DO NOTHING;
 INSERT INTO track (track_id, name, album_id, media_type_id, genre_id, composer, milliseconds, bytes, unit_price) VALUES
     (2001, 'Tourette''s', 163, 1, 1, 'Kurt Cobain', 115591, 3753246, 0.99),
     (2002, 'Blew', 163, 1, 1, 'Kurt Cobain', 216346, 7096936, 0.99),
@@ -3671,8 +3665,7 @@ INSERT INTO track (track_id, name, album_id, media_type_id, genre_id, composer, 
     (2997, 'Love Rescue Me', 237, 1, 1, 'Bono/Clayton, Adam/Dylan, Bob/Mullen Jr., Larry/The Edge', 384522, 12508716, 0.99),
     (2998, 'When Love Comes To Town', 237, 1, 1, 'Bono/Clayton, Adam/Mullen Jr., Larry/The Edge', 255869, 8340954, 0.99),
     (2999, 'Heartland', 237, 1, 1, 'Bono/Clayton, Adam/Mullen Jr., Larry/The Edge', 303360, 9867748, 0.99),
-    (3000, 'God Part II', 237, 1, 1, 'Bono/Clayton, Adam/Mullen Jr., Larry/The Edge', 195604, 6497570, 0.99);
-
+    (3000, 'God Part II', 237, 1, 1, 'Bono/Clayton, Adam/Mullen Jr., Larry/The Edge', 195604, 6497570, 0.99) ON CONFLICT DO NOTHING;
 INSERT INTO track (track_id, name, album_id, media_type_id, genre_id, composer, milliseconds, bytes, unit_price) VALUES
     (3001, 'The Star Spangled Banner', 237, 1, 1, 'Hendrix, Jimi', 43232, 1385810, 0.99),
     (3002, 'Bullet The Blue Sky', 237, 1, 1, 'Bono/Clayton, Adam/Mullen Jr., Larry/The Edge', 337005, 10993607, 0.99),
@@ -4176,8 +4169,7 @@ INSERT INTO track (track_id, name, album_id, media_type_id, genre_id, composer, 
     (3500, 'String Quartet No. 12 in C Minor, D. 703 "Quartettsatz": II. Andante - Allegro assai', 344, 2, 24, 'Franz Schubert', 139200, 2283131, 0.99),
     (3501, 'L''orfeo, Act 3, Sinfonia (Orchestra)', 345, 2, 24, 'Claudio Monteverdi', 66639, 1189062, 0.99),
     (3502, 'Quintet for Horn, Violin, 2 Violas, and Cello in E Flat Major, K. 407/386c: III. Allegro', 346, 2, 24, 'Wolfgang Amadeus Mozart', 221331, 3665114, 0.99),
-    (3503, 'Koyaanisqatsi', 347, 2, 10, 'Philip Glass', 206005, 3305164, 0.99);
-
+    (3503, 'Koyaanisqatsi', 347, 2, 10, 'Philip Glass', 206005, 3305164, 0.99) ON CONFLICT DO NOTHING;
 INSERT INTO employee (employee_id, last_name, first_name, title, reports_to, birth_date, hire_date, address, city, state, country, postal_code, phone, fax, email) VALUES
     (1, 'Adams', 'Andrew', 'General Manager', NULL, '1962/2/18', '2002/8/14', '11120 Jasper Ave NW', 'Edmonton', 'AB', 'Canada', 'T5K 2N1', '+1 (780) 428-9482', '+1 (780) 428-3457', 'andrew@chinookcorp.com'),
     (2, 'Edwards', 'Nancy', 'Sales Manager', 1, '1958/12/8', '2002/5/1', '825 8 Ave SW', 'Calgary', 'AB', 'Canada', 'T2P 2T3', '+1 (403) 262-3443', '+1 (403) 262-3322', 'nancy@chinookcorp.com'),
@@ -4186,8 +4178,7 @@ INSERT INTO employee (employee_id, last_name, first_name, title, reports_to, bir
     (5, 'Johnson', 'Steve', 'Sales Support Agent', 2, '1965/3/3', '2003/10/17', '7727B 41 Ave', 'Calgary', 'AB', 'Canada', 'T3B 1Y7', '1 (780) 836-9987', '1 (780) 836-9543', 'steve@chinookcorp.com'),
     (6, 'Mitchell', 'Michael', 'IT Manager', 1, '1973/7/1', '2003/10/17', '5827 Bowness Road NW', 'Calgary', 'AB', 'Canada', 'T3B 0C5', '+1 (403) 246-9887', '+1 (403) 246-9899', 'michael@chinookcorp.com'),
     (7, 'King', 'Robert', 'IT Staff', 6, '1970/5/29', '2004/1/2', '590 Columbia Boulevard West', 'Lethbridge', 'AB', 'Canada', 'T1K 5N8', '+1 (403) 456-9986', '+1 (403) 456-8485', 'robert@chinookcorp.com'),
-    (8, 'Callahan', 'Laura', 'IT Staff', 6, '1968/1/9', '2004/3/4', '923 7 ST NW', 'Lethbridge', 'AB', 'Canada', 'T1H 1Y8', '+1 (403) 467-3351', '+1 (403) 467-8772', 'laura@chinookcorp.com');
-
+    (8, 'Callahan', 'Laura', 'IT Staff', 6, '1968/1/9', '2004/3/4', '923 7 ST NW', 'Lethbridge', 'AB', 'Canada', 'T1H 1Y8', '+1 (403) 467-3351', '+1 (403) 467-8772', 'laura@chinookcorp.com') ON CONFLICT DO NOTHING;
 INSERT INTO customer (customer_id, first_name, last_name, company, address, city, state, country, postal_code, phone, fax, email, support_rep_id) VALUES
     (1, 'Luís', 'Gonçalves', 'Embraer - Empresa Brasileira de Aeronáutica S.A.', 'Av. Brigadeiro Faria Lima, 2170', 'São José dos Campos', 'SP', 'Brazil', '12227-000', '+55 (12) 3923-5555', '+55 (12) 3923-5566', 'luisg@embraer.com.br', 3),
     (2, 'Leonie', 'Köhler', NULL, 'Theodor-Heuss-Straße 34', 'Stuttgart', NULL, 'Germany', '70174', '+49 0711 2842222', NULL, 'leonekohler@surfeu.de', 5),
@@ -4247,8 +4238,7 @@ INSERT INTO customer (customer_id, first_name, last_name, company, address, city
     (56, 'Diego', 'Gutiérrez', NULL, '307 Macacha Güemes', 'Buenos Aires', NULL, 'Argentina', '1106', '+54 (0)11 4311 4333', NULL, 'diego.gutierrez@yahoo.ar', 4),
     (57, 'Luis', 'Rojas', NULL, 'Calle Lira, 198', 'Santiago', NULL, 'Chile', NULL, '+56 (0)2 635 4444', NULL, 'luisrojas@yahoo.cl', 5),
     (58, 'Manoj', 'Pareek', NULL, '12,Community Centre', 'Delhi', NULL, 'India', '110017', '+91 0124 39883988', NULL, 'manoj.pareek@rediff.com', 3),
-    (59, 'Puja', 'Srivastava', NULL, '3,Raj Bhavan Road', 'Bangalore', NULL, 'India', '560001', '+91 080 22289999', NULL, 'puja_srivastava@yahoo.in', 3);
-
+    (59, 'Puja', 'Srivastava', NULL, '3,Raj Bhavan Road', 'Bangalore', NULL, 'India', '560001', '+91 080 22289999', NULL, 'puja_srivastava@yahoo.in', 3) ON CONFLICT DO NOTHING;
 INSERT INTO invoice (invoice_id, customer_id, invoice_date, billing_address, billing_city, billing_state, billing_country, billing_postal_code, total) VALUES
     (1, 2, '2021/1/1', 'Theodor-Heuss-Straße 34', 'Stuttgart', NULL, 'Germany', '70174', 1.98),
     (2, 4, '2021/1/2', 'Ullevålsveien 14', 'Oslo', NULL, 'Norway', '0171', 3.96),
@@ -4661,8 +4651,7 @@ INSERT INTO invoice (invoice_id, customer_id, invoice_date, billing_address, bil
     (409, 29, '2025/12/6', '796 Dundas Street West', 'Toronto', 'O', 'Canada', 'M6J 1V1', 5.94),
     (410, 35, '2025/12/9', 'Rua dos Campeões Europeus de Viena, 4350', 'Porto', NULL, 'Portugal', NULL, 8.91),
     (411, 44, '2025/12/14', 'Porthaninkatu 9', 'Helsinki', NULL, 'Finland', '00530', 13.86),
-    (412, 58, '2025/12/22', '12,Community Centre', 'Delhi', NULL, 'India', '110017', 1.99);
-
+    (412, 58, '2025/12/22', '12,Community Centre', 'Delhi', NULL, 'India', '110017', 1.99) ON CONFLICT DO NOTHING;
 INSERT INTO invoice_line (invoice_line_id, invoice_id, track_id, unit_price, quantity) VALUES
     (1, 1, 2, 0.99, 1),
     (2, 1, 4, 0.99, 1),
@@ -5663,8 +5652,7 @@ INSERT INTO invoice_line (invoice_line_id, invoice_id, track_id, unit_price, qua
     (997, 185, 2553, 0.99, 1),
     (998, 185, 2557, 0.99, 1),
     (999, 185, 2561, 0.99, 1),
-    (1000, 185, 2565, 0.99, 1);
-
+    (1000, 185, 2565, 0.99, 1) ON CONFLICT DO NOTHING;
 INSERT INTO invoice_line (invoice_line_id, invoice_id, track_id, unit_price, quantity) VALUES
     (1001, 186, 2571, 0.99, 1),
     (1002, 186, 2577, 0.99, 1),
@@ -6665,8 +6653,7 @@ INSERT INTO invoice_line (invoice_line_id, invoice_id, track_id, unit_price, qua
     (1997, 368, 1645, 0.99, 1),
     (1998, 369, 1654, 0.99, 1),
     (1999, 369, 1663, 0.99, 1),
-    (2000, 369, 1672, 0.99, 1);
-
+    (2000, 369, 1672, 0.99, 1) ON CONFLICT DO NOTHING;
 INSERT INTO invoice_line (invoice_line_id, invoice_id, track_id, unit_price, quantity) VALUES
     (2001, 369, 1681, 0.99, 1),
     (2002, 369, 1690, 0.99, 1),
@@ -6907,8 +6894,7 @@ INSERT INTO invoice_line (invoice_line_id, invoice_id, track_id, unit_price, qua
     (2237, 411, 3145, 0.99, 1),
     (2238, 411, 3154, 0.99, 1),
     (2239, 411, 3163, 0.99, 1),
-    (2240, 412, 3177, 1.99, 1);
-
+    (2240, 412, 3177, 1.99, 1) ON CONFLICT DO NOTHING;
 INSERT INTO playlist (playlist_id, name) VALUES
     (1, 'Music'),
     (2, 'Movies'),
@@ -6927,8 +6913,7 @@ INSERT INTO playlist (playlist_id, name) VALUES
     (15, 'Classical 101 - The Basics'),
     (16, 'Grunge'),
     (17, 'Heavy Metal Classic'),
-    (18, 'On-The-Go 1');
-
+    (18, 'On-The-Go 1') ON CONFLICT DO NOTHING;
 INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (1, 3402),
     (1, 3389),
@@ -7929,8 +7914,7 @@ INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (1, 982),
     (1, 983),
     (1, 984),
-    (1, 985);
-
+    (1, 985) ON CONFLICT DO NOTHING;
 INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (1, 986),
     (1, 987),
@@ -8931,8 +8915,7 @@ INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (1, 685),
     (1, 686),
     (1, 687),
-    (1, 688);
-
+    (1, 688) ON CONFLICT DO NOTHING;
 INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (1, 689),
     (1, 690),
@@ -9933,8 +9916,7 @@ INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (1, 2547),
     (1, 2548),
     (1, 2549),
-    (1, 2550);
-
+    (1, 2550) ON CONFLICT DO NOTHING;
 INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (1, 2551),
     (1, 2552),
@@ -10935,8 +10917,7 @@ INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (5, 2704),
     (5, 2494),
     (5, 2514),
-    (5, 2515);
-
+    (5, 2515) ON CONFLICT DO NOTHING;
 INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (5, 2516),
     (5, 2517),
@@ -11937,8 +11918,7 @@ INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (8, 19),
     (8, 20),
     (8, 21),
-    (8, 22);
-
+    (8, 22) ON CONFLICT DO NOTHING;
 INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (8, 3411),
     (8, 3412),
@@ -12939,8 +12919,7 @@ INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (8, 501),
     (8, 502),
     (8, 503),
-    (8, 504);
-
+    (8, 504) ON CONFLICT DO NOTHING;
 INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (8, 505),
     (8, 506),
@@ -13941,8 +13920,7 @@ INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (8, 1945),
     (8, 1946),
     (8, 1947),
-    (8, 1948);
-
+    (8, 1948) ON CONFLICT DO NOTHING;
 INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (8, 1949),
     (8, 1950),
@@ -14943,8 +14921,7 @@ INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (8, 3064),
     (8, 3065),
     (8, 3066),
-    (8, 3067);
-
+    (8, 3067) ON CONFLICT DO NOTHING;
 INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (8, 3068),
     (8, 3069),
@@ -15660,4 +15637,4 @@ INSERT INTO playlist_track (playlist_id, track_id) VALUES
     (17, 2095),
     (17, 2096),
     (17, 3290),
-    (18, 597);
+    (18, 597) ON CONFLICT DO NOTHING;
