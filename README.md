@@ -76,6 +76,50 @@ docs/tasks/         # Task breakdowns per feature
 docs/learnings/     # Documented solutions and patterns
 ```
 
+## Networking Architecture
+
+All services communicate over a private custom VPC — no public IP traffic for data plane operations.
+
+```
+                          ┌─────────────────────────────────────────┐
+                          │          cdc-demo-vpc (custom)          │
+                          │                                        │
+  ┌────────────────┐      │  ┌──────────────┐  ┌───────────────┐   │
+  │   Cloud Run    │──────┼──│  VPC Access   │  │   Subnet      │   │
+  │ (Kafka Connect)│      │  │  Connector    │  │  10.0.1.0/24  │   │
+  └────────────────┘      │  │ 10.8.0.0/28  │  └───────┬───────┘   │
+                          │  └──────┬───────┘          │           │
+                          │         │                  │           │
+                          │         ▼                  ▼           │
+                          │  ┌──────────────┐  ┌───────────────┐   │
+                          │  │  Cloud SQL   │  │ Managed Kafka │   │
+                          │  │ (Private IP) │  │  (VPC-bound)  │   │
+                          │  │  via PSA     │  │               │   │
+                          │  └──────────────┘  └───────────────┘   │
+                          │                                        │
+                          └─────────────────────────────────────────┘
+                                         │
+                            Private Google Access
+                                         │
+                                         ▼
+                               ┌──────────────────┐
+                               │    BigQuery       │
+                               │ (Google-managed)  │
+                               └──────────────────┘
+```
+
+**Key networking components:**
+
+| Component | Resource | Purpose |
+|---|---|---|
+| Custom VPC | `google_compute_network` | Isolates all pipeline resources |
+| Subnet (`10.0.1.0/24`) | `google_compute_subnetwork` | Primary CIDR for compute and managed services |
+| VPC Access Connector (`10.8.0.0/28`) | `google_vpc_access_connector` | Bridges Cloud Run → VPC for private IP access |
+| Private Service Access | `google_service_networking_connection` | Enables Cloud SQL private IP via VPC peering |
+| Firewall (internal) | `google_compute_firewall` | Allows PostgreSQL (5432), Kafka (9092–9093), Connect (8083) |
+| Firewall (health checks) | `google_compute_firewall` | Allows Google health check probes |
+| Private Google Access | Subnet attribute | Allows private resources to reach BigQuery and GCP APIs |
+
 ## Getting Started
 
 ### 1. Configure

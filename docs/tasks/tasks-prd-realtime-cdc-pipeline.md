@@ -55,15 +55,15 @@
 
 ## Tasks
 
-- [ ] 1.0 Networking & Foundational Terraform Infrastructure (Complete Vertical Slice)
-  - [ ] 1.1 Create Terraform project scaffolding: `infra/main.tf` with `google` and `google-beta` provider configuration, required API enablement (`sqladmin.googleapis.com`, `managedkafka.googleapis.com`, `bigquery.googleapis.com`, `run.googleapis.com`, `artifactregistry.googleapis.com`, `cloudbuild.googleapis.com`, `compute.googleapis.com`, `vpcaccess.googleapis.com`), local backend, and `infra/variables.tf` with inputs for `project_id`, `region` (default `europe-west1`), and naming prefixes
-  - [ ] 1.2 Define VPC and subnets in `infra/network.tf`: create a custom VPC with a single subnet in `europe-west1`, including secondary ranges if needed for Cloud Run Direct VPC Egress; add firewall rules allowing internal communication between Cloud Run, Cloud SQL, and Managed Kafka
-  - [ ] 1.3 Define a Serverless VPC Access Connector (or configure Direct VPC Egress) in `infra/network.tf` to enable Cloud Run to reach private Cloud SQL and Managed Kafka endpoints
-  - [ ] 1.4 Define service accounts and IAM bindings in `infra/iam.tf`: create a dedicated service account for Cloud Run/Kafka Connect with roles `roles/managedkafka.client`, `roles/cloudsql.client`, `roles/bigquery.dataEditor`, `roles/bigquery.jobUser`, and `roles/artifactregistry.reader`
-  - [ ] 1.5 Create `infra/outputs.tf` exporting VPC ID, subnet self-links, service account email, and VPC connector name; create `infra/terraform.tfvars.example` with placeholder values
-  - [ ] 1.6 Write tests in `tests/test_infra_networking.py` to validate Terraform configuration: run `terraform validate` and `terraform plan` and assert no errors; verify expected resource counts
-  - [ ] 1.7 Add logging annotations and labels to all Terraform resources for traceability (e.g., `labels = { managed_by = "terraform", project = "cdc-pipeline-demo" }`)
-  - [ ] 1.8 Document the networking architecture in `README.md` including a diagram of VPC topology and connectivity between services
+- [x] 1.0 Networking & Foundational Terraform Infrastructure (Complete Vertical Slice)
+  - [x] 1.1 Create Terraform project scaffolding: `infra/main.tf` with `google` and `google-beta` provider configuration, required API enablement (`sqladmin.googleapis.com`, `managedkafka.googleapis.com`, `bigquery.googleapis.com`, `run.googleapis.com`, `artifactregistry.googleapis.com`, `cloudbuild.googleapis.com`, `compute.googleapis.com`, `vpcaccess.googleapis.com`), local backend, and `infra/variables.tf` with inputs for `project_id`, `region` (default `europe-west1`), and naming prefixes
+  - [x] 1.2 Define VPC and subnets in `infra/network.tf`: create a custom VPC with a single subnet in `europe-west1`, including secondary ranges if needed for Cloud Run Direct VPC Egress; add firewall rules allowing internal communication between Cloud Run, Cloud SQL, and Managed Kafka
+  - [x] 1.3 Define a Serverless VPC Access Connector (or configure Direct VPC Egress) in `infra/network.tf` to enable Cloud Run to reach private Cloud SQL and Managed Kafka endpoints
+  - [x] 1.4 Define service accounts and IAM bindings in `infra/iam.tf`: create a dedicated service account for Cloud Run/Kafka Connect with roles `roles/managedkafka.client`, `roles/cloudsql.client`, `roles/bigquery.dataEditor`, `roles/bigquery.jobUser`, and `roles/artifactregistry.reader`
+  - [x] 1.5 Create `infra/outputs.tf` exporting VPC ID, subnet self-links, service account email, and VPC connector name; create `infra/terraform.tfvars.example` with placeholder values
+  - [x] 1.6 Write tests in `tests/test_infra_networking.py` to validate Terraform configuration: run `terraform validate` and `terraform plan` and assert no errors; verify expected resource counts
+  - [x] 1.7 Add logging annotations and labels to all Terraform resources for traceability (e.g., `labels = { managed_by = "terraform", project = "cdc-pipeline-demo" }`)
+  - [x] 1.8 Document the networking architecture in `README.md` including a diagram of VPC topology and connectivity between services
 
 - [ ] 2.0 Cloud SQL for PostgreSQL & Database Initialization (Complete Vertical Slice)
   - [ ] 2.1 Define Cloud SQL instance in `infra/cloudsql.tf`: `google_sql_database_instance` with PostgreSQL 15+, `db-f1-micro` tier, 10 GB SSD, `europe-west1`, private IP on the VPC, and database flags `cloudsql.logical_decoding=on`
