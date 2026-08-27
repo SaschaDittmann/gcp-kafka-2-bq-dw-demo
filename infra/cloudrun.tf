@@ -81,6 +81,7 @@ locals {
 # =============================================================================
 
 resource "google_cloud_run_v2_service" "kafka_connect_source" {
+  count               = var.enable_cloudrun ? 1 : 0
   name                = "${var.name_prefix}-connect-source"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
@@ -153,6 +154,7 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
 # =============================================================================
 
 resource "google_cloud_run_v2_service" "kafka_connect_sink" {
+  count               = var.enable_cloudrun ? 1 : 0
   name                = "${var.name_prefix}-connect-sink"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"

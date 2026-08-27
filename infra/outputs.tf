@@ -163,22 +163,22 @@ output "vpc_connector_id" {
 
 output "cloudrun_source_service_name" {
   description = "The Cloud Run source (Debezium) service name."
-  value       = google_cloud_run_v2_service.kafka_connect_source.name
+  value       = var.enable_cloudrun ? google_cloud_run_v2_service.kafka_connect_source[0].name : null
 }
 
 output "cloudrun_source_service_url" {
   description = "The Cloud Run source service URL."
-  value       = google_cloud_run_v2_service.kafka_connect_source.uri
+  value       = var.enable_cloudrun ? google_cloud_run_v2_service.kafka_connect_source[0].uri : null
 }
 
 output "cloudrun_sink_service_name" {
   description = "The Cloud Run sink (BigQuery) service name."
-  value       = google_cloud_run_v2_service.kafka_connect_sink.name
+  value       = var.enable_cloudrun ? google_cloud_run_v2_service.kafka_connect_sink[0].name : null
 }
 
 output "cloudrun_sink_service_url" {
   description = "The Cloud Run sink service URL."
-  value       = google_cloud_run_v2_service.kafka_connect_sink.uri
+  value       = var.enable_cloudrun ? google_cloud_run_v2_service.kafka_connect_sink[0].uri : null
 }
 
 # -----------------------------------------------------------------------------

@@ -58,3 +58,13 @@ variable "psa_cidr_prefix_length" {
   type        = number
   default     = 20
 }
+
+# -----------------------------------------------------------------------------
+# Feature Flags
+# -----------------------------------------------------------------------------
+
+variable "enable_cloudrun" {
+  description = "Whether to deploy Cloud Run Kafka Connect services. Set to true when the Docker image has been built and pushed."
+  type        = bool
+  default     = false
+}
