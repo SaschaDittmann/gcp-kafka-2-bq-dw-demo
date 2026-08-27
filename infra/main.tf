@@ -68,6 +68,7 @@ locals {
     "servicenetworking.googleapis.com",
     "sqladmin.googleapis.com",
     "managedkafka.googleapis.com",
+    "secretmanager.googleapis.com",
     "run.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",

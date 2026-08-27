@@ -39,6 +39,36 @@ resource "google_storage_bucket_iam_member" "connect_gcs_writer" {
 }
 
 # -----------------------------------------------------------------------------
+# Secret Manager — replication password for CDC source connector
+# Managed Kafka Connect requires passwords as Secret Manager references.
+# -----------------------------------------------------------------------------
+
+resource "google_secret_manager_secret" "db_repl_password" {
+  secret_id = "${var.name_prefix}-db-repl-password"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  labels = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "db_repl_password" {
+  secret      = google_secret_manager_secret.db_repl_password.id
+  secret_data = random_password.db_repl_password.result
+}
+
+# Grant the Kafka Connect SA access to read the secret
+resource "google_secret_manager_secret_iam_member" "connect_secret_access" {
+  secret_id = google_secret_manager_secret.db_repl_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.kafka_connect.member
+}
+
+# -----------------------------------------------------------------------------
 # Managed Kafka Connect Cluster
 # Minimum: 3 vCPUs, 3 GiB memory. Requires /22 subnet.
 # -----------------------------------------------------------------------------
@@ -96,12 +126,13 @@ resource "google_managed_kafka_connector" "cdc_source" {
     "connector.class" = "io.debezium.connector.postgresql.PostgresConnector"
     "tasks.max"       = "1"
 
-    # Cloud SQL connection
-    "database.hostname" = google_sql_database_instance.postgres.private_ip_address
-    "database.port"     = "5432"
-    "database.user"     = "replication_user"
-    "database.password" = random_password.db_repl_password.result
-    "database.dbname"   = "chinook"
+    # Cloud SQL connection — use Cloud SQL JDBC driver with IAM auth
+    "database.dbname"          = "chinook"
+    "database.user"            = "replication_user"
+    "database.password"        = "$${directory:/var/secrets:${var.project_id}-${var.name_prefix}-db-repl-password-latest}"
+    "driver.cloudSqlInstance"   = google_sql_database_instance.postgres.connection_name
+    "driver.enableIamAuth"     = "false"
+    "driver.sslmode"           = "disable"
 
     # CDC configuration
     "topic.prefix"                   = "chinook"
@@ -110,7 +141,6 @@ resource "google_managed_kafka_connector" "cdc_source" {
     "slot.name"                      = "debezium_slot"
     "publication.name"               = "debezium_publication"
     "publication.autocreate.mode"    = "disabled"
-    "database.server.name"           = "chinook"
     "snapshot.mode"                  = "initial"
     "decimal.handling.mode"          = "double"
     "time.precision.mode"            = "connect"
@@ -194,7 +224,7 @@ resource "google_managed_kafka_connector" "gcs_sink" {
   configs = {
     # Connector identity
     "name"            = "gcs-sink"
-    "connector.class" = "com.google.cloud.kafka.connect.gcs.GcsSinkConnector"
+    "connector.class" = "io.aiven.kafka.connect.gcs.GcsSinkConnector"
     "tasks.max"       = "1"
 
     # GCS destination
