@@ -20,6 +20,7 @@
 #   DB_USER        - Admin user with CREATE/ALTER privileges (default: admin)
 #   REPL_USER      - Replication user name (default: debezium)
 #   REPL_PASSWORD  - Replication user password
+#   PROJECT_NUMBER - GCP project number (for Managed Kafka SA user setup)
 #
 # Optional:
 #   GCS_BUCKET     - GCS bucket for staging SQL files (default: gs://<PROJECT_ID>-sql-import)
@@ -38,10 +39,11 @@ DB_NAME="${DB_NAME:-chinook}"
 DB_USER="${DB_USER:-admin}"
 REPL_USER="${REPL_USER:-debezium}"
 REPL_PASSWORD="${REPL_PASSWORD:?ERROR: REPL_PASSWORD environment variable is required}"
+PROJECT_NUMBER="${PROJECT_NUMBER:-}"
 GCS_BUCKET="${GCS_BUCKET:-gs://${PROJECT_ID}-sql-import}"
 
 STEP=0
-TOTAL_STEPS=6
+TOTAL_STEPS=7
 ERRORS=0
 
 # -----------------------------------------------------------------------------
@@ -193,7 +195,24 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${REPL_USER};
 " "repl_user" && log_success "Replication user '${REPL_USER}' is ready" \
    || { log_error "Failed to create replication user"; exit 1; }
 
-# ---- Step 5: Create logical replication slot --------------------------------
+# ---- Step 5: Configure Managed Kafka SA for CDC ----------------------------
+
+log_step "Configuring Managed Kafka SA for CDC (IAM database user)"
+
+if [[ -z "${PROJECT_NUMBER}" ]]; then
+  log_info "PROJECT_NUMBER not set — looking it up via gcloud..."
+  PROJECT_NUMBER=$(gcloud projects describe "${PROJECT_ID}" --format="value(projectNumber)" 2>/dev/null)
+fi
+
+MANAGED_KAFKA_SA="service-${PROJECT_NUMBER}@gcp-sa-managedkafka.iam"
+
+run_sql "
+ALTER USER \"${MANAGED_KAFKA_SA}\" WITH REPLICATION;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"${MANAGED_KAFKA_SA}\";
+" "managed_kafka_sa" && log_success "Managed Kafka SA '${MANAGED_KAFKA_SA}' configured for CDC" \
+   || { log_error "Failed to configure Managed Kafka SA (user may not exist yet — run after Terraform creates the IAM user)"; }
+
+# ---- Step 6: Create logical replication slot --------------------------------
 
 log_step "Creating logical replication slot 'debezium_slot'"
 
@@ -211,7 +230,7 @@ END
 " "repl_slot" "${REPL_USER}" && log_success "Logical replication slot 'debezium_slot' is ready" \
    || { log_error "Failed to create replication slot"; exit 1; }
 
-# ---- Step 6: Create publication for all tables ------------------------------
+# ---- Step 7: Create publication for all tables ------------------------------
 
 log_step "Creating publication 'debezium_publication' for all tables"
 

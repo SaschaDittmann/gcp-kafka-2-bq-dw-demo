@@ -48,6 +48,33 @@ resource "google_project_iam_member" "kafka_connect_roles" {
 }
 
 # -----------------------------------------------------------------------------
+# Managed Kafka Service Agent — Cloud SQL access
+# The managed source connector uses the Managed Kafka SA (not our custom SA)
+# to connect to Cloud SQL with IAM authentication.
+# SA: service-PROJECT_NUMBER@gcp-sa-managedkafka.iam.gserviceaccount.com
+# -----------------------------------------------------------------------------
+
+resource "google_project_iam_member" "managed_kafka_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-managedkafka.iam.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "managed_kafka_cloudsql_user" {
+  project = var.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-managedkafka.iam.gserviceaccount.com"
+}
+
+# Cloud SQL IAM database user for the Managed Kafka SA
+resource "google_sql_user" "managed_kafka_iam" {
+  name     = "service-${data.google_project.current.number}@gcp-sa-managedkafka.iam"
+  instance = google_sql_database_instance.postgres.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+  project  = var.project_id
+}
+
+# -----------------------------------------------------------------------------
 # Cloud Build — Default Compute Engine SA needs storage access
 # gcloud builds submit uses this SA to upload source to the _cloudbuild bucket
 # and write the built image to Artifact Registry.

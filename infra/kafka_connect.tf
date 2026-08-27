@@ -127,13 +127,13 @@ resource "google_managed_kafka_connector" "cdc_source" {
     "connector.class" = "io.debezium.connector.postgresql.PostgresConnector"
     "tasks.max"       = "1"
 
-    # Cloud SQL connection — use Cloud SQL JDBC driver with IAM auth
+    # Cloud SQL connection — uses Managed Kafka SA with IAM auth
+    # The managed service connects as service-PROJECT_NUMBER@gcp-sa-managedkafka.iam
     "database.dbname"          = "chinook"
-    "database.user"            = "replication_user"
-    "database.password"        = "$${directory:/var/secrets:${var.project_id}-${var.name_prefix}-db-repl-password-latest}"
-    "driver.cloudSqlInstance"   = google_sql_database_instance.postgres.connection_name
-    "driver.enableIamAuth"     = "false"
-    "driver.sslmode"           = "disable"
+    "driver.cloudSqlInstance"  = google_sql_database_instance.postgres.connection_name
+    "driver.enableIamAuth"    = "true"
+    "driver.ipTypes"          = "PRIVATE"
+    "driver.sslmode"          = "disable"
 
     # CDC configuration
     "topic.prefix"                   = "chinook"
@@ -205,6 +205,11 @@ resource "google_managed_kafka_connector" "bigquery_sink" {
   timeouts {
     create = "30m"
     delete = "10m"
+  }
+
+  # GCP auto-sets task_restart_policy; ignore it to avoid update_mask errors
+  lifecycle {
+    ignore_changes = [task_restart_policy]
   }
 }
 
