@@ -10,24 +10,31 @@ A reference implementation of an end-to-end, serverless streaming data pipeline 
 │  PostgreSQL  │────▶│    Kafka     │────▶│  Bronze → Silver → Gold (SCD2)  │
 │  (CDC Source)│     │   (Broker)   │     │  via Continuous Queries          │
 └──────────────┘     └──────────────┘     └──────────────────────────────────┘
-        │                    ▲    │
-        │                    │    │
-        └──── Debezium ──────┘    └──── BQ Sink ────┐
-              Source Connector         Connector     │
-        ┌─────────────────┐    ┌─────────────────┐  │
-        │  Cloud Run      │    │  Cloud Run      │──┘
-        │  connect-source │    │  connect-sink   │
-        │  (1 instance)   │    │  (1-4 instances)│
-        └─────────────────┘    └─────────────────┘
+        │                    ▲    │               │
+        │                    │    │               │
+        └── CDC Source ──────┘    ├── BQ Sink ────┘
+            Connector             └── GCS Sink ──▶  gs://<project>-cdc-archive/
+                                                    (long-term JSONL archive)
+    ┌─────────────────────────────────────────┐
+    │        Managed Kafka Connect             │
+    │  Source: Cloud SQL PostgreSQL (Debezium) │
+    │  Sink: BigQuery (Bronze layer)           │
+    │  Sink: GCS (long-term CDC archive)       │
+    └─────────────────────────────────────────┘
+            OR (source_connector_type = "cloudrun")
+    ┌─────────────────┐
+    │  Cloud Run      │
+    │  connect-source │  ← Self-hosted Debezium
+    │  (1 instance)   │
+    └─────────────────┘
 ```
 
 **Key components:**
 
-- **Cloud SQL for PostgreSQL** — OLTP source with logical decoding enabled for CDC
-- **Google Managed Service for Apache Kafka** — Central message broker with per-table topics
-- **Kafka Connect on Cloud Run (split architecture):**
-  - **Source service** — Debezium CDC connector, fixed at 1 instance (1 replication slot)
-  - **Sink service** — BigQuery Sink connector, scalable 1–4 instances
+- **Cloud SQL for PostgreSQL** — OLTP source with CDC
+- **Google Managed Kafka** — Central message broker with per-table topics
+- **Google Managed Kafka Connect** — Built-in connectors for CDC source, BigQuery sink, and GCS archive sink
+- **Cloud Run (optional)** — Self-hosted Debezium source connector, toggle via `source_connector_type`
 - **BigQuery Continuous Queries** — Real-time transformations across three layers:
   - **Bronze** — Append-only raw CDC events (Debezium envelope)
   - **Silver** — Current-state entity tables with soft-delete handling
@@ -69,7 +76,7 @@ The pipeline uses the [Chinook sample database](https://github.com/lerocha/chino
 
 ```
 infra/              # Terraform configurations for GCP
-connect/            # Kafka Connect Dockerfile and connector configs
+connect/            # Kafka Connect Dockerfile and source connector config (for Cloud Run mode)
 scripts/            # Deployment and teardown shell scripts
 transform/          # BigQuery Continuous Query SQL scripts
 data/               # SQL schema, seed data, and database initialization scripts
@@ -89,7 +96,7 @@ All services communicate over a private custom VPC — no public IP traffic for 
                           │                                        │
   ┌────────────────┐      │  ┌──────────────┐  ┌───────────────┐   │
   │  Cloud Run     │──────┼──│  VPC Access   │  │   Subnet      │   │
-  │ connect-source │      │  │  Connector    │  │  10.0.1.0/24  │   │
+  │ connect-source │      │  │  Connector    │  │  10.0.0.0/22  │   │
   ├────────────────┤      │  │ 10.8.0.0/28  │  └───────┬───────┘   │
   │  Cloud Run     │──────┤  └──────┬───────┘          │           │
   │ connect-sink   │      │         │                  │           │
@@ -116,7 +123,7 @@ All services communicate over a private custom VPC — no public IP traffic for 
 | Component | Resource | Purpose |
 |---|---|---|
 | Custom VPC | `google_compute_network` | Isolates all pipeline resources |
-| Subnet (`10.0.1.0/24`) | `google_compute_subnetwork` | Primary CIDR for compute and managed services |
+| Subnet (`10.0.0.0/22`) | `google_compute_subnetwork` | Primary CIDR for compute and managed services (requires /22 for Managed Kafka Connect) |
 | VPC Access Connector (`10.8.0.0/28`) | `google_vpc_access_connector` | Bridges Cloud Run → VPC for private IP access |
 | Private Service Access | `google_service_networking_connection` | Enables Cloud SQL private IP via VPC peering |
 | Firewall (internal) | `google_compute_firewall` | Allows PostgreSQL (5432), Kafka (9092–9093), Connect (8083) |
@@ -206,47 +213,21 @@ gcloud managed-kafka topics list \
   --project=kafka-2-bq-streaming-demo
 ```
 
-## Kafka Connect (Cloud Run — Split Architecture)
+## Kafka Connect (Managed + Cloud Run)
 
-Two independent Kafka Connect services run on Cloud Run for production-like isolation and scalability:
+By default, **ALL connectors run on Google Managed Kafka Connect** (fully managed, no Docker required):
+- **CDC Source Connector** — Built-in Cloud SQL PostgreSQL connector
+- **BigQuery Sink Connector** — Built-in sink connector
+- **GCS Archive Sink Connector** — Built-in sink connector (long-term JSONL archive)
 
-| Service | Cloud Run Name | Scaling | Description |
-|---|---|---|---|
-| **Source** | `cdc-demo-connect-source` | Fixed: 1 instance | Debezium CDC from Cloud SQL → Kafka |
-| **Sink** | `cdc-demo-connect-sink` | 1–4 instances | Kafka → BigQuery bronze layer |
-
-**Why split?** The source connector is bound to a single PostgreSQL replication slot (can't parallelize), while the sink can scale independently based on throughput. Separate services provide independent failure domains, scaling, and deployment.
-
-**Docker image contents (`connect/Dockerfile`):**
-- Base: `confluentinc/cp-kafka-connect:7.7.1`
-- Debezium PostgreSQL Source Connector (v2.7.3.Final)
-- BigQuery Sink Connector (v2.6.3)
-- Google Managed Kafka auth library (v1.0.6) for SASL/OAUTHBEARER
+**Self-hosted option:**
+You can toggle `source_connector_type = "cloudrun"` in Terraform to use a self-hosted Debezium source connector on Cloud Run instead.
+When `cloudrun` is selected, it requires building a Docker image first (`gcloud builds submit connect/ --tag=...`).
+The Docker image (`connect/Dockerfile`) contains only Debezium and the Managed Kafka auth library (no BigQuery sink).
 
 **SMT (Single Message Transforms) on the BigQuery Sink:**
 - `ReplaceField$Value` — drops `phone` and `fax` fields from all records
 - `Filter` with `RecordIsTombstone` predicate — filters out tombstone delete markers
-
-**Registering connectors:**
-
-```bash
-# Set env vars, then run:
-./connect/register-connectors.sh
-```
-
-**Verifying connector status:**
-
-```bash
-# Source service
-SOURCE_URL=$(gcloud run services describe cdc-demo-connect-source \
-  --region=europe-west1 --format="value(status.url)")
-curl ${SOURCE_URL}/connectors/debezium-source/status
-
-# Sink service
-SINK_URL=$(gcloud run services describe cdc-demo-connect-sink \
-  --region=europe-west1 --format="value(status.url)")
-curl ${SINK_URL}/connectors/bigquery-sink/status
-```
 
 ## BigQuery Data Warehouse (Bronze / Silver / Gold)
 
@@ -301,7 +282,8 @@ terraform apply
 ```
 
 > **Note:** The Managed Kafka cluster takes **15–30 minutes** to provision on first apply.
-> Cloud Run services will show "image not found" errors until `deploy.sh` builds the Docker image.
+> You can toggle `source_connector_type` between `"managed"` (default) and `"cloudrun"` in your `terraform.tfvars`.
+> If using Cloud Run, services will show "image not found" errors until `deploy.sh` builds the Docker image.
 
 ### 3. Deploy Pipeline
 
@@ -314,11 +296,10 @@ This orchestrates the full post-Terraform deployment:
 | Step | Description | Duration |
 |------|-------------|----------|
 | 1 | Initialize Chinook database (schema, seed, replication) | ~2 min |
-| 2 | Build & push Kafka Connect Docker image via Cloud Build | ~5 min |
-| 3 | Update Cloud Run services with the new image | ~1 min |
-| 4 | Wait for Cloud Run services to become healthy | ~2 min |
-| 5 | Register Debezium source + BigQuery sink connectors | ~1 min |
-| 6 | Start 10 BigQuery Continuous Queries (5 Silver + 5 Gold) | ~1 min |
+| 2 | Build & push Docker image (only if using Cloud Run source) | ~5 min |
+| 3 | Update Cloud Run services (only if using Cloud Run source) | ~1 min |
+| 4 | Wait for Cloud Run services (only if using Cloud Run source) | ~2 min |
+| 5 | Start 10 BigQuery Continuous Queries (5 Silver + 5 Gold) | ~1 min |
 
 **Skip flags** (useful for re-runs):
 ```bash
@@ -421,6 +402,7 @@ uv run pytest tests/ -v
 
 ### Cloud Run: "Image not found"
 
+*(Only relevant when `source_connector_type = "cloudrun"`)*
 The Docker image hasn't been built yet. Build it manually:
 ```bash
 gcloud builds submit connect/ \
@@ -429,11 +411,11 @@ gcloud builds submit connect/ \
 
 ### Cloud Run: `deletion_protection` errors
 
+*(Only relevant when `source_connector_type = "cloudrun"`)*
 If Terraform can't destroy Cloud Run services:
 ```bash
 cd infra
 terraform untaint google_cloud_run_v2_service.kafka_connect_source
-terraform untaint google_cloud_run_v2_service.kafka_connect_sink
 terraform apply --auto-approve
 ```
 
@@ -475,10 +457,11 @@ SKIP_IMAGE_BUILD=true SKIP_CQ_START=true ./scripts/deploy.sh
 | Component | Technology |
 |---|---|
 | Source Database | Cloud SQL for PostgreSQL |
-| CDC | Debezium PostgreSQL Source Connector |
+| CDC | Debezium PostgreSQL Source Connector (Managed or Cloud Run) |
 | Message Broker | Google Managed Service for Apache Kafka |
-| Ingestion Runtime | Kafka Connect on Cloud Run |
-| Sink | BigQuery Kafka Sink Connector |
+| Ingestion Runtime | Google Managed Kafka Connect (built-in) / Cloud Run (optional) |
+| CDC Archive | Google Cloud Storage (JSONL on GCS) |
+| Sink | BigQuery Sink Connector (Managed Kafka Connect) |
 | In-Flight Processing | Kafka Connect SMTs (ReplaceField, Filter) |
 | Transformations | BigQuery Continuous Queries |
 | Data Warehouse | Google BigQuery (Bronze / Silver / Gold) |

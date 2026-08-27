@@ -53,28 +53,27 @@ This is a **standalone pipeline** that operates independently from the existing 
 7. Configure dedicated Kafka topics per source table following the Debezium naming convention (e.g., `chinook.public.customer`, `chinook.public.invoice`, `chinook.public.track`).
 8. Use IAM-based authentication — the Kafka Connect service account must have the `roles/managedkafka.client` role.
 
-### 4.3. CDC Ingestion & Sink (Kafka Connect on Cloud Run)
+### 4.3. CDC Ingestion & Sink (Managed & Cloud Run Dual-Mode)
 
-9. Build a custom Docker image based on the official Kafka Connect image, bundling:
-   - Debezium PostgreSQL Source Connector
-   - BigQuery Kafka Sink Connector
-   - Google Managed Kafka auth library (GcpLoginCallbackHandler) for SASL/OAUTHBEARER
-10. Build the Docker image using **Cloud Build** (`gcloud builds submit`) and push it to Artifact Registry. No local Docker daemon is required.
-11. Deploy **two independent Cloud Run services** for production-like isolation and scalability:
-    - **Source service** (`connect-source`): Runs the Debezium CDC connector. Fixed at 1 instance (1 replication slot = 1 task). Lightweight: 1 CPU / 1 GiB.
-    - **Sink service** (`connect-sink`): Runs the BigQuery Sink connector. Scalable from 1 to 4 instances based on throughput. 2 CPU / 2 GiB per instance.
-    - Both services use `CPU always allocated` mode, VPC connectivity, and have independent `CONNECT_GROUP_ID` and internal topics for separate offset tracking.
-12. Use **JSON** as the serialization format (`value.converter=org.apache.kafka.connect.json.JsonConverter`). No schema registry is required.
-13. After both services are running, register connectors via their respective REST APIs:
-    - Source connector → source service (`POST /connectors`)
-    - Sink connector → sink service (`POST /connectors`)
+9. Support a **dual-mode architecture** for the CDC source ingestion:
+   - **Default:** Google Managed Kafka Connect with the built-in Debezium PostgreSQL connector.
+   - **Optional:** Cloud Run self-hosted Debezium source (toggled via `source_connector_type` in Terraform).
+10. Sinks are **always managed**: The BigQuery sink and GCS archive sink both run on Google Managed Kafka Connect.
+11. **Secret Manager** is required for storing the PostgreSQL database password when using the managed connectors.
+12. For the Cloud Run self-hosted source option, build a custom Docker image based on the official Kafka Connect image, bundling:
+    - Debezium PostgreSQL Source Connector
+    - Google Managed Kafka auth library (GcpLoginCallbackHandler) for SASL/OAUTHBEARER
+    - *Note: No BigQuery connector is needed in the image since sinks are fully managed.*
+13. Use **JSON** as the serialization format (`value.converter=org.apache.kafka.connect.json.JsonConverter`). No schema registry is required.
 14. Configure the Debezium Source Connector to capture CDC events from all Chinook source tables.
 15. Configure the BigQuery Sink Connector to write CDC events to the Bronze layer tables.
+16. **GCS CDC Archive Sink:** Configure a GCS sink connector to archive all CDC events as JSONL (gzip) to GCS for long-term storage and replay.
 
 ### 4.4. In-Flight Processing (SMTs)
 
-16. Configure the `ReplaceField$Value` SMT on the sink connector to exclude sensitive fields (`phone`, `fax`) from customer and employee events before writing to BigQuery.
-17. Optionally configure the `Filter` SMT to exclude specific message types (e.g., tombstone records or specific status updates) from the sink.
+17. SMTs are configured entirely in Terraform (`kafka_connect.tf`) for the managed BigQuery sink connector, rather than in a separate JSON config file.
+18. Configure the `ReplaceField$Value` SMT on the sink connector to exclude sensitive fields (`phone`, `fax`) from customer and employee events before writing to BigQuery.
+19. Optionally configure the `Filter` SMT to exclude specific message types (e.g., tombstone records or specific status updates) from the sink.
 
 ### 4.5. BigQuery Data Warehouse (Bronze / Silver / Gold)
 
@@ -103,9 +102,11 @@ This is a **standalone pipeline** that operates independently from the existing 
     - Cloud SQL instance and database
     - Managed Kafka cluster and topics
     - BigQuery datasets and table schemas
-    - Artifact Registry repository
-    - Cloud Run service for Kafka Connect
-    - IAM bindings for the Cloud Run service account
+    - Managed Kafka Connect clusters (Source, BQ Sink, GCS Sink)
+    - Secret Manager secret for database password
+    - GCS archive bucket
+    - Optional Cloud Run service and Artifact Registry repository (if self-hosted source is toggled)
+    - IAM bindings
 24. All Terraform configuration must reside in the `infra/` directory.
 25. Use **local state** (`terraform.tfstate` file) — no remote backend required for the demo.
 
@@ -147,7 +148,7 @@ This is a **standalone pipeline** that operates independently from the existing 
 
 ### Dependencies
 - Google Cloud project with billing enabled
-- APIs enabled: Cloud SQL Admin, Managed Kafka, BigQuery, Cloud Run, Artifact Registry, Cloud Build, Compute Engine (for VPC)
+- APIs enabled: Cloud SQL Admin, Managed Kafka, Secret Manager, BigQuery, Cloud Run, Artifact Registry, Cloud Build, Compute Engine (for VPC)
 - Terraform >= 1.5 with the `google` and `google-beta` providers
 - `gcloud`, `bq`, `psql` CLI tools available locally
 - Docker is **not** required locally — container images are built via Cloud Build
@@ -160,7 +161,7 @@ This is a **standalone pipeline** that operates independently from the existing 
 
 ### Constraints
 - **BigQuery Continuous Queries** are a relatively new feature. CQ support for `MERGE` statements may be limited; the implementation may need to fall back to `INSERT`-based patterns with deduplication.
-- **Managed Kafka** provisioning can take 15–30 minutes. The deployment script must account for this.
+- **Managed Kafka** and **Managed Kafka Connect** cluster provisioning can take 15–20 minutes. The deployment script must account for this.
 - **Cloud Run with "CPU always allocated"** is required because Kafka Connect is a long-running process, not a request-driven service.
 - **VPC networking** is required for private connectivity between Cloud Run, Cloud SQL, and Managed Kafka. This adds complexity to the Terraform configuration.
 - **Chinook schema lacks timestamps.** All event ordering relies on Debezium's `ts_ms` field, not source-table columns.

@@ -114,8 +114,8 @@ output "connect_cluster_id" {
 }
 
 output "connect_source_connector_id" {
-  description = "The CDC source connector ID."
-  value       = google_managed_kafka_connector.cdc_source.connector_id
+  description = "The managed CDC source connector ID (null when source_connector_type = cloudrun)."
+  value       = var.source_connector_type == "managed" ? google_managed_kafka_connector.cdc_source[0].connector_id : null
 }
 
 output "connect_bigquery_sink_id" {
@@ -134,7 +134,7 @@ output "cdc_archive_bucket" {
 }
 
 # -----------------------------------------------------------------------------
-# Artifact Registry (for future Cloud Run deployment)
+# Artifact Registry (for Cloud Run source deployment)
 # -----------------------------------------------------------------------------
 
 output "artifact_registry_repository" {
@@ -148,7 +148,7 @@ output "artifact_registry_url" {
 }
 
 # -----------------------------------------------------------------------------
-# Cloud Run (for future Cloud Run deployment)
+# Cloud Run (deployed when source_connector_type = "cloudrun")
 # -----------------------------------------------------------------------------
 
 output "vpc_connector_name" {
@@ -163,22 +163,12 @@ output "vpc_connector_id" {
 
 output "cloudrun_source_service_name" {
   description = "The Cloud Run source (Debezium) service name."
-  value       = var.enable_cloudrun ? google_cloud_run_v2_service.kafka_connect_source[0].name : null
+  value       = var.source_connector_type == "cloudrun" ? google_cloud_run_v2_service.kafka_connect_source[0].name : null
 }
 
 output "cloudrun_source_service_url" {
   description = "The Cloud Run source service URL."
-  value       = var.enable_cloudrun ? google_cloud_run_v2_service.kafka_connect_source[0].uri : null
-}
-
-output "cloudrun_sink_service_name" {
-  description = "The Cloud Run sink (BigQuery) service name."
-  value       = var.enable_cloudrun ? google_cloud_run_v2_service.kafka_connect_sink[0].name : null
-}
-
-output "cloudrun_sink_service_url" {
-  description = "The Cloud Run sink service URL."
-  value       = var.enable_cloudrun ? google_cloud_run_v2_service.kafka_connect_sink[0].uri : null
+  value       = var.source_connector_type == "cloudrun" ? google_cloud_run_v2_service.kafka_connect_source[0].uri : null
 }
 
 # -----------------------------------------------------------------------------

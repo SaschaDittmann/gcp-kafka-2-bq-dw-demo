@@ -114,6 +114,7 @@ resource "google_managed_kafka_connect_cluster" "connect" {
 # -----------------------------------------------------------------------------
 
 resource "google_managed_kafka_connector" "cdc_source" {
+  count           = var.source_connector_type == "managed" ? 1 : 0
   provider        = google-beta
   project         = var.project_id
   connector_id    = "cdc-source"

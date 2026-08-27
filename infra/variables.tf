@@ -63,8 +63,17 @@ variable "psa_cidr_prefix_length" {
 # Feature Flags
 # -----------------------------------------------------------------------------
 
-variable "enable_cloudrun" {
-  description = "Whether to deploy Cloud Run Kafka Connect services. Set to true when the Docker image has been built and pushed."
-  type        = bool
-  default     = false
+variable "source_connector_type" {
+  description = <<-EOT
+    How to deploy the CDC source connector:
+    - "managed"  (default) — Built-in Cloud SQL for PostgreSQL source via Managed Kafka Connect
+    - "cloudrun" — Self-hosted Debezium on Cloud Run (requires Docker image build first)
+  EOT
+  type        = string
+  default     = "managed"
+
+  validation {
+    condition     = contains(["managed", "cloudrun"], var.source_connector_type)
+    error_message = "source_connector_type must be either \"managed\" or \"cloudrun\"."
+  }
 }
