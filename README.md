@@ -248,6 +248,38 @@ SINK_URL=$(gcloud run services describe cdc-demo-connect-sink \
 curl ${SINK_URL}/connectors/bigquery-sink/status
 ```
 
+## BigQuery Data Warehouse (Bronze / Silver / Gold)
+
+Three-layer **medallion architecture** for CDC data processing:
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│     Bronze      │     │     Silver      │     │      Gold       │
+│  (Raw CDC)      │────▶│  (Current State)│────▶│  (Star Schema)  │
+│                 │ CQ  │                 │ CQ  │                 │
+│  11 tables      │     │  11 tables      │     │  3 dims + 2 fct │
+│  Debezium JSON  │     │  Typed columns  │     │  SCD2 + lookups │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+**Bronze layer** (`bronze` dataset) — 11 `*_raw` tables with Debezium envelope columns:
+`before`, `after` (JSON), `op` (c/u/d/r), `ts_ms`, `source`
+
+**Silver layer** (`silver` dataset) — 11 entity tables with typed columns, plus:
+- `is_deleted` — soft-delete flag (TRUE when `op='d'`)
+- `_loaded_at` — BigQuery ingestion timestamp
+- `_source_ts_ms` — Debezium source timestamp
+
+**Gold layer** (`gold` dataset):
+- **Dimensions (SCD Type 2):** `dim_customer`, `dim_track` (denormalized with album/artist/genre/media_type), `dim_employee`
+  - Each change creates a new row with `surrogate_key` (UUID), `valid_from`, `valid_to`, `is_active`
+- **Facts:** `fct_invoice`, `fct_invoice_line` with surrogate key references and computed `line_total`
+
+**Continuous Queries** (`transform/*.sql`) — Launched via `bq query --continuous=true`:
+- BigQuery CQs are **INSERT-only** using `APPENDS()` — no MERGE support
+- Silver tables are append-only event logs; current-state views use `QUALIFY ROW_NUMBER()`
+- Requires BigQuery **Enterprise edition** with slot reservations
+
 ## Getting Started
 
 ### 1. Configure

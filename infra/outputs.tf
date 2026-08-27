@@ -150,3 +150,16 @@ output "cloudrun_sink_service_url" {
   description = "The Cloud Run sink service URL."
   value       = google_cloud_run_v2_service.kafka_connect_sink.uri
 }
+
+# -----------------------------------------------------------------------------
+# BigQuery
+# -----------------------------------------------------------------------------
+
+output "bigquery_datasets" {
+  description = "The BigQuery dataset IDs (bronze, silver, gold)."
+  value = {
+    bronze = google_bigquery_dataset.bronze.dataset_id
+    silver = google_bigquery_dataset.silver.dataset_id
+    gold   = google_bigquery_dataset.gold.dataset_id
+  }
+}
