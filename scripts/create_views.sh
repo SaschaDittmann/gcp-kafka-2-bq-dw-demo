@@ -103,3 +103,4 @@ if [[ ${errors} -gt 0 ]]; then
 else
   echo "✓ All views created successfully."
 fi
+

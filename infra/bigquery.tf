@@ -73,15 +73,9 @@ resource "google_bigquery_reservation_assignment" "default" {
 }
 
 # =============================================================================
-# Bronze Layer Tables — Auto-created by BigQuery Sink Connector
-# =============================================================================
-# The BQ sink connector auto-creates tables (autoCreateTables=true) with the
-# correct schema inferred from the Debezium CDC envelope. Table names follow
-# the pattern: {table}_raw (via RegexRouter SMT).
-#
-# Schema is derived from the Debezium source schema with value.converter
-# schemas.enable=true, which produces properly typed RECORD columns for
-# the `before`, `after`, and `source` envelope fields.
+# Bronze Layer Tables — see bigquery_bronze.tf
+# Silver Layer Views  — see bigquery_views.tf
+# Gold Layer Views    — see bigquery_views.tf
 # =============================================================================
 
 # =============================================================================
@@ -146,32 +140,10 @@ resource "google_bigquery_table" "silver_employee" {
 }
 
 # =============================================================================
-# Silver Layer Views — Reference/Lookup Tables (Non-Persistent)
-# =============================================================================
-# These tables change rarely (genre, media_type, artist, album, playlist,
-# playlist_track). Instead of running continuous CQs, we use views on Bronze
-# with QUALIFY ROW_NUMBER() to extract the latest state.
-#
-# IMPORTANT: Views are NOT managed by Terraform because they reference
-# Bronze tables that are auto-created by the BigQuery Sink Connector.
-# Terraform cannot create views on tables that don't exist yet.
-#
-# After running `terraform apply`, you MUST re-run the view creation step:
-#   ./scripts/create_views.sh
-# or re-run the full deploy:
-#   ./scripts/deploy.sh
-#
-# See: transform/silver_artist.sql, silver_album.sql, silver_genre.sql,
-#      silver_media_type.sql, silver_playlist.sql, silver_playlist_track.sql
-# See: transform/gold_v_dim_customer.sql, gold_v_dim_employee.sql,
-#      gold_v_dim_track.sql, gold_v_fct_invoice.sql, gold_v_fct_invoice_line.sql
-# =============================================================================
-
-# =============================================================================
 # Silver Layer Tables — Core Entity Tables (Persistent via CQ)
 # =============================================================================
-# These tables change frequently or feed Gold layer CQs as streaming sources.
-# They are populated by Continuous Queries from Bronze.
+# These tables change frequently and are populated by Continuous Queries
+# from Bronze. They serve as sources for Gold scheduled queries.
 # =============================================================================
 
 # --- track ---
