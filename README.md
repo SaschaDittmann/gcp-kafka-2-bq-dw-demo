@@ -432,6 +432,15 @@ Continuous Queries require BigQuery Enterprise edition with slot reservations.
 The Terraform configuration creates an autoscale reservation (up to 100 slots) with CONTINUOUS job type assignment.
 If you see this error, ensure `terraform apply` has been run to create the reservation.
 
+### BigQuery: Views missing after `terraform apply`
+
+Silver and Gold views are **not managed by Terraform** because they reference Bronze tables that are auto-created by the BigQuery Sink Connector (Terraform can't create views on tables that don't yet exist).
+
+If `terraform apply` destroys the views, recreate them:
+```bash
+./scripts/create_views.sh
+```
+
 ### Cloud Build: Permission denied
 
 Grant the Compute Engine default SA the required roles:

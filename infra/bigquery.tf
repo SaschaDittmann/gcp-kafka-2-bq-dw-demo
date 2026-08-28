@@ -152,12 +152,19 @@ resource "google_bigquery_table" "silver_employee" {
 # playlist_track). Instead of running continuous CQs, we use views on Bronze
 # with QUALIFY ROW_NUMBER() to extract the latest state.
 #
-# Views are defined as SQL scripts in transform/silver_*.sql and deployed
-# after the BQ sink connector creates the Bronze tables. This avoids a
-# dependency on auto-created tables during terraform apply.
+# IMPORTANT: Views are NOT managed by Terraform because they reference
+# Bronze tables that are auto-created by the BigQuery Sink Connector.
+# Terraform cannot create views on tables that don't exist yet.
+#
+# After running `terraform apply`, you MUST re-run the view creation step:
+#   ./scripts/create_views.sh
+# or re-run the full deploy:
+#   ./scripts/deploy.sh
 #
 # See: transform/silver_artist.sql, silver_album.sql, silver_genre.sql,
 #      silver_media_type.sql, silver_playlist.sql, silver_playlist_track.sql
+# See: transform/gold_v_dim_customer.sql, gold_v_dim_employee.sql,
+#      gold_v_dim_track.sql, gold_v_fct_invoice.sql, gold_v_fct_invoice_line.sql
 # =============================================================================
 
 # =============================================================================
