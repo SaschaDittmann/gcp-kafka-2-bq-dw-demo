@@ -1,18 +1,47 @@
 """Tests for PII masking — verify phone/fax fields are excluded from BigQuery."""
 import json
 import os
+import re
 
 import pytest
 
 CONNECT_DIR = os.path.join(os.path.dirname(__file__), "..", "connect")
 INFRA_DIR = os.path.join(os.path.dirname(__file__), "..", "infra")
 
+def extract_tf_config(resource_id):
+    filepath = os.path.join(INFRA_DIR, "kafka_connect.tf")
+    if not os.path.exists(filepath):
+        return {}
+    with open(filepath) as f:
+        content = f.read()
+
+    resource_pattern = f'resource "google_managed_kafka_connector" "{resource_id}" {{'
+    start_idx = content.find(resource_pattern)
+    if start_idx == -1:
+        return {}
+
+    configs_start = content.find('configs = {', start_idx)
+    if configs_start == -1:
+        return {}
+
+    configs_end = content.find('}', configs_start)
+    configs_block = content[configs_start:configs_end]
+
+    config = {}
+    for line in configs_block.split('\n'):
+        match = re.search(r'"([^"]+)"\s*=\s*"([^"]+)"', line)
+        if match:
+            config[match.group(1)] = match.group(2)
+        else:
+            match2 = re.search(r'"([^"]+)"\s*=\s*([a-zA-Z0-9_\.\-]+)', line)
+            if match2:
+                config[match2.group(1)] = match2.group(2)
+    return {"config": config}
+
 
 @pytest.fixture
 def bigquery_sink_config():
-    config_file = os.path.join(CONNECT_DIR, "bigquery-sink.json")
-    with open(config_file) as f:
-        return json.load(f)
+    return extract_tf_config("bigquery_sink")
 
 
 @pytest.fixture
@@ -27,7 +56,7 @@ def bigquery_tf():
 def test_sink_connector_has_replace_field_smt(bigquery_sink_config):
     config = bigquery_sink_config.get("config", {})
     transforms = config.get("transforms", "")
-    assert "filterFields" in transforms or "ReplaceField" in str(config), (
+    assert "ReplaceField" in str(config), (
         "BigQuery sink connector must have a ReplaceField SMT to exclude PII fields"
     )
 
@@ -49,10 +78,6 @@ def test_sink_connector_excludes_fax(bigquery_sink_config):
 # ---- BigQuery Schema Tests ----
 
 def test_bronze_tables_have_no_phone_column(bigquery_tf):
-    # Bronze tables use generic Debezium envelope columns (before, after, op, ts_ms)
-    # They don't have entity-specific columns — phone/fax are inside the JSON 'after' blob
-    # This is expected: PII exclusion happens at the Kafka Connect SMT level
-    # The SMT strips phone/fax from the JSON before it reaches BigQuery
     assert "phone" not in bigquery_tf.split("# Silver")[0].lower() or \
            "after" in bigquery_tf, (
         "Bronze layer uses JSON envelope — phone/fax excluded by SMT before ingestion"
@@ -60,10 +85,8 @@ def test_bronze_tables_have_no_phone_column(bigquery_tf):
 
 
 def test_silver_tables_have_no_phone_column(bigquery_tf):
-    # Silver table schemas should not include phone or fax columns
     silver_section = bigquery_tf.split("# Gold")[0].split("Silver")[-1] \
         if "Silver" in bigquery_tf else ""
-    # Check the customer table schema specifically (most likely to have phone/fax)
     customer_section = bigquery_tf[
         bigquery_tf.find('silver_customer'):
         bigquery_tf.find('silver_employee')

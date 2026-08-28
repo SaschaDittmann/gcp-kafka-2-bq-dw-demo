@@ -1,20 +1,20 @@
 # Real-Time CDC Pipeline: Cloud SQL → Kafka → BigQuery
 
-A reference implementation of an end-to-end, serverless streaming data pipeline on Google Cloud. This demo captures transactional data changes (CDC) from a PostgreSQL database, streams them through Google Managed Kafka, and models them into a real-time BigQuery star schema using Continuous Queries.
+A reference implementation of an end-to-end, serverless streaming data pipeline on Google Cloud. This demo captures transactional data changes (CDC) from a PostgreSQL database, streams them through Google Managed Kafka, and models them into a real-time BigQuery star schema using Continuous Queries and Scheduled Queries.
 
 ## Architecture
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────────────────────────┐
-│  Cloud SQL   │     │   Managed    │     │           BigQuery               │
-│  PostgreSQL  │────▶│    Kafka     │────▶│  Bronze → Silver → Gold (SCD2)  │
-│  (CDC Source)│     │   (Broker)   │     │  via Continuous Queries          │
-└──────────────┘     └──────────────┘     └──────────────────────────────────┘
-        │                    ▲    │               │
-        │                    │    │               │
+┌──────────────┐     ┌──────────────┐     ┌──────────────────────────────────────────────┐
+│  Cloud SQL   │     │   Managed    │     │                   BigQuery                   │
+│  PostgreSQL  │────▶│    Kafka     │────▶│        Bronze → Silver → Gold (SCD2)         │
+│  (CDC Source)│     │   (Broker)   │     │  via Continuous Queries + Scheduled Queries  │
+└──────────────┘     └──────────────┘     └──────────────────────────────────────────────┘
+        │                    ▲    │                               │
+        │                    │    │                               │
         └── CDC Source ──────┘    ├── BQ Sink ────┘
             Connector             └── GCS Sink ──▶  gs://<project>-cdc-archive/
-                                                    (long-term JSONL archive)
+                                                    (long-term JSON archive)
     ┌─────────────────────────────────────────┐
     │        Managed Kafka Connect             │
     │  Source: Cloud SQL PostgreSQL (Debezium) │
@@ -35,10 +35,10 @@ A reference implementation of an end-to-end, serverless streaming data pipeline 
 - **Google Managed Kafka** — Central message broker with per-table topics
 - **Google Managed Kafka Connect** — Built-in connectors for CDC source, BigQuery sink, and GCS archive sink
 - **Cloud Run (optional)** — Self-hosted Debezium source connector, toggle via `source_connector_type`
-- **BigQuery Continuous Queries** — Real-time transformations across three layers:
-  - **Bronze** — Append-only raw CDC events (Debezium envelope)
-  - **Silver** — Current-state entity tables with soft-delete handling
-  - **Gold** — Star schema with SCD Type 2 dimensions and point-in-time–correct fact tables
+- **BigQuery Continuous Queries + Scheduled Queries** — Real-time and near-real-time transformations across three layers:
+  - **Bronze** — Append-only raw CDC events (Debezium envelope with RECORD-typed columns)
+  - **Silver** — Current-state entity tables (5 CQ-populated tables + 6 views on Bronze)
+  - **Gold** — Star schema with SCD Type 2 dimensions and fact tables (Managed Apache Iceberg on GCS, populated by scheduled queries every 5 min)
 
 ## Demo Schema
 
@@ -78,7 +78,7 @@ The pipeline uses the [Chinook sample database](https://github.com/lerocha/chino
 infra/              # Terraform configurations for GCP
 connect/            # Kafka Connect Dockerfile and source connector config (for Cloud Run mode)
 scripts/            # Deployment and teardown shell scripts
-transform/          # BigQuery Continuous Query SQL scripts
+transform/          # BigQuery transformation SQL — CQs, scheduled queries, and views
 data/               # SQL schema, seed data, and database initialization scripts
 tests/              # End-to-end and integration tests
 docs/prds/          # Product Requirements Documents
@@ -186,17 +186,17 @@ A Google Managed Service for Apache Kafka cluster handles CDC event streaming be
 
 | Topic Name | Source Table |
 |---|---|
-| `chinook.public.customer` | `customer` |
-| `chinook.public.employee` | `employee` |
-| `chinook.public.artist` | `artist` |
-| `chinook.public.album` | `album` |
-| `chinook.public.track` | `track` |
-| `chinook.public.genre` | `genre` |
-| `chinook.public.media_type` | `media_type` |
-| `chinook.public.invoice` | `invoice` |
-| `chinook.public.invoice_line` | `invoice_line` |
-| `chinook.public.playlist` | `playlist` |
-| `chinook.public.playlist_track` | `playlist_track` |
+| `cdc.public.customer` | `customer` |
+| `cdc.public.employee` | `employee` |
+| `cdc.public.artist` | `artist` |
+| `cdc.public.album` | `album` |
+| `cdc.public.track` | `track` |
+| `cdc.public.genre` | `genre` |
+| `cdc.public.media_type` | `media_type` |
+| `cdc.public.invoice` | `invoice` |
+| `cdc.public.invoice_line` | `invoice_line` |
+| `cdc.public.playlist` | `playlist` |
+| `cdc.public.playlist_track` | `playlist_track` |
 
 Each topic has 1 partition and replication factor 3 (across availability zones).
 
@@ -218,7 +218,7 @@ gcloud managed-kafka topics list \
 By default, **ALL connectors run on Google Managed Kafka Connect** (fully managed, no Docker required):
 - **CDC Source Connector** — Built-in Cloud SQL PostgreSQL connector
 - **BigQuery Sink Connector** — Built-in sink connector
-- **GCS Archive Sink Connector** — Built-in sink connector (long-term JSONL archive)
+- **GCS Archive Sink Connector** — Built-in sink connector (long-term JSON archive)
 
 **Self-hosted option:**
 You can toggle `source_connector_type = "cloudrun"` in Terraform to use a self-hosted Debezium source connector on Cloud Run instead.
@@ -237,19 +237,21 @@ Three-layer **medallion architecture** for CDC data processing:
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │     Bronze      │     │     Silver      │     │      Gold       │
 │  (Raw CDC)      │────▶│  (Current State)│────▶│  (Star Schema)  │
-│                 │ CQ  │                 │ CQ  │  Apache Iceberg │
+│                 │ CQ  │                 │ SQ  │  Apache Iceberg │
 │  11 tables      │     │  11 tables      │     │  3 dims + 2 fct │
-│  Debezium JSON  │     │  Typed columns  │     │  Parquet on GCS │
+│  RECORD structs │     │  Typed columns  │     │  Parquet on GCS │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
+
+> CQ = Continuous Query (streaming), SQ = Scheduled Query (every 5 min)
 ```
 
 **Bronze layer** (`bronze` dataset) — 11 `*_raw` tables with Debezium envelope columns:
-`before`, `after` (JSON), `op` (c/u/d/r), `ts_ms`, `source`
+`before`, `after` (RECORD/struct), `source` (RECORD), `op` (c/u/d/r), `ts_ms`, `ts_us`, `ts_ns`, `transaction`
 
 **Silver layer** (`silver` dataset) — hybrid approach:
-- **5 persistent tables** (customer, employee, track, invoice, invoice_line) — populated by CQs, used as Gold CQ streaming sources
-- **6 views on Bronze** (artist, album, genre, media_type, playlist, playlist_track) — reference/lookup data that rarely changes, uses `QUALIFY ROW_NUMBER()` for current-state dedup without CQ overhead
-- All expose: `is_deleted`, `_loaded_at`, `_source_ts_ms`
+- **5 persistent tables** (customer, employee, track, invoice, invoice_line) — populated by CQs, used as sources for Gold scheduled queries
+- **6 views on Bronze** (artist, album, genre, media_type, playlist, playlist_track) — reference/lookup data that rarely changes, uses `QUALIFY ROW_NUMBER()` for current-state dedup
+- All expose: `is_deleted`, `_source_ts_ms` (views) or `_loaded_at`, `_source_ts_ms` (tables)
 
 **Gold layer** (`gold` dataset) — **Managed Apache Iceberg** tables (Parquet on GCS):
 - **Dimensions (SCD Type 2):** `dim_customer`, `dim_track` (denormalized with album/artist/genre/media_type), `dim_employee`
@@ -257,11 +259,11 @@ Three-layer **medallion architecture** for CDC data processing:
 - **Facts:** `fct_invoice`, `fct_invoice_line` with surrogate key references and computed `line_total`
 - **Interoperability:** Data stored as Parquet in GCS (`gs://<project>-iceberg-gold/`) — queryable by Spark, Trino, Flink, or any Iceberg-compatible engine
 
-**Continuous Queries** (`transform/*.sql`) — Launched via `bq query --continuous=true`:
-- **5 Bronze → Silver CQs** for core entities (reference tables use views instead)
-- **5 Silver → Gold CQs** for dimensions and facts
-- BigQuery CQs are **INSERT-only** using `APPENDS()` — no MERGE support
-- Requires BigQuery **Enterprise edition** with slot reservations
+**Transformations** (`transform/*.sql`):
+- **5 Silver CQs** (Bronze → Silver) — Continuous Queries using `APPENDS(TABLE, NULL)` for streaming, launched via `bq query --continuous=true`
+- **5 Gold Scheduled Queries** (Silver → Gold) — BigQuery Data Transfer scheduled queries running every 5 minutes, managed by Terraform
+- **5 Gold current-state views** (`v_dim_customer`, `v_dim_employee`, `v_dim_track`, `v_fct_invoice`, `v_fct_invoice_line`) — provide easy access to current dim values and fact tables with resolved dimension names
+- Requires BigQuery **Enterprise edition** with slot reservations (autoscale, CONTINUOUS assignment)
 
 ## Getting Started
 
@@ -299,7 +301,10 @@ This orchestrates the full post-Terraform deployment:
 | 2 | Build & push Docker image (only if using Cloud Run source) | ~5 min |
 | 3 | Update Cloud Run services (only if using Cloud Run source) | ~1 min |
 | 4 | Wait for Cloud Run services (only if using Cloud Run source) | ~2 min |
-| 5 | Start 10 BigQuery Continuous Queries (5 Silver + 5 Gold) | ~1 min |
+| 5 | Wait for Bronze tables, then create Silver + Gold views | ~5 min |
+| 6 | Start 5 Silver Continuous Queries (Bronze → Silver) | ~1 min |
+
+Note: Gold scheduled queries are managed by Terraform (auto-deployed on `terraform apply`).
 
 **Skip flags** (useful for re-runs):
 ```bash
@@ -333,19 +338,16 @@ bq query --use_legacy_sql=false \
    WHERE is_deleted = FALSE
    LIMIT 10'
 
-# Gold — star schema dimensions (Iceberg)
+# Gold — current-state dimensions (via views)
 bq query --use_legacy_sql=false \
-  'SELECT surrogate_key, first_name, last_name, city, country, is_active
-   FROM `gold.dim_customer`
-   WHERE is_active = TRUE
+  'SELECT customer_id, first_name, last_name, city, country
+   FROM `gold.v_dim_customer`
    LIMIT 10'
 
-# Gold — fact tables
+# Gold — fact tables with resolved dimension names
 bq query --use_legacy_sql=false \
-  'SELECT f.invoice_id, f.total, d.first_name, d.last_name
-   FROM `gold.fct_invoice` f
-   JOIN `gold.dim_customer` d ON f.customer_key = d.surrogate_key
-   WHERE d.is_active = TRUE
+  'SELECT invoice_id, total, customer_first_name, customer_last_name
+   FROM `gold.v_fct_invoice`
    LIMIT 10'
 ```
 
@@ -427,14 +429,8 @@ If it times out, just re-run `terraform apply` — it will pick up where it left
 ### BigQuery CQs: "Enterprise edition required"
 
 Continuous Queries require BigQuery Enterprise edition with slot reservations.
-Create a reservation with at least 10 slots:
-```bash
-bq mk --reservation --project_id=<project-id> --location=europe-west1 \
-  --slots=10 --edition=ENTERPRISE default
-bq mk --reservation_assignment --project_id=<project-id> --location=europe-west1 \
-  --reservation_id=default --job_type=CONTINUOUS --assignee_id=<project-id> \
-  --assignee_type=PROJECT
-```
+The Terraform configuration creates an autoscale reservation (up to 100 slots) with CONTINUOUS job type assignment.
+If you see this error, ensure `terraform apply` has been run to create the reservation.
 
 ### Cloud Build: Permission denied
 
@@ -460,10 +456,10 @@ SKIP_IMAGE_BUILD=true SKIP_CQ_START=true ./scripts/deploy.sh
 | CDC | Debezium PostgreSQL Source Connector (Managed or Cloud Run) |
 | Message Broker | Google Managed Service for Apache Kafka |
 | Ingestion Runtime | Google Managed Kafka Connect (built-in) / Cloud Run (optional) |
-| CDC Archive | Google Cloud Storage (JSONL on GCS) |
+| CDC Archive | Google Cloud Storage (JSON on GCS) |
 | Sink | BigQuery Sink Connector (Managed Kafka Connect) |
 | In-Flight Processing | Kafka Connect SMTs (ReplaceField, Filter) |
-| Transformations | BigQuery Continuous Queries |
+| Transformations | BigQuery Continuous Queries + Scheduled Queries |
 | Data Warehouse | Google BigQuery (Bronze / Silver / Gold) |
 | Gold Table Format | Apache Iceberg (Managed) on GCS |
 | Infrastructure | Terraform (google / google-beta providers) |

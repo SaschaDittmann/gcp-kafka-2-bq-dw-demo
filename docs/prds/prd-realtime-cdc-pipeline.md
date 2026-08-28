@@ -2,7 +2,7 @@
 
 ## 1. Introduction
 
-This feature delivers an end-to-end, serverless streaming data pipeline on Google Cloud that captures transactional data changes (CDC) from a PostgreSQL database and models them into a real-time BigQuery star schema. The pipeline uses Cloud SQL for PostgreSQL as the OLTP source, Google Managed Service for Apache Kafka as the event broker, Kafka Connect on Cloud Run for CDC ingestion and sink, and BigQuery Continuous Queries (CQ) for real-time Bronze → Silver → Gold transformations.
+This feature delivers an end-to-end, serverless streaming data pipeline on Google Cloud that captures transactional data changes (CDC) from a PostgreSQL database and models them into a real-time BigQuery star schema. The pipeline uses Cloud SQL for PostgreSQL as the OLTP source, Google Managed Service for Apache Kafka as the event broker, Google Managed Kafka Connect for CDC ingestion and sinks (with an optional Cloud Run mode for the CDC source), BigQuery Continuous Queries for real-time Bronze → Silver transformations, and BigQuery Scheduled Queries for near-real-time Silver → Gold transformations.
 
 The problem this solves: Data Engineers need a production-grade reference implementation demonstrating how to build a real-time CDC pipeline on GCP using fully managed and serverless components — without custom application code for the streaming layer.
 
@@ -50,7 +50,7 @@ This is a **standalone pipeline** that operates independently from the existing 
 ### 4.2. Streaming Broker (Google Managed Service for Apache Kafka)
 
 6. Provision a Google Managed Kafka cluster.
-7. Configure dedicated Kafka topics per source table following the Debezium naming convention (e.g., `chinook.public.customer`, `chinook.public.invoice`, `chinook.public.track`).
+7. Configure dedicated Kafka topics per source table following the Debezium naming convention (e.g., `cdc.public.customer`, `cdc.public.invoice`, `cdc.public.track`).
 8. Use IAM-based authentication — the Kafka Connect service account must have the `roles/managedkafka.client` role.
 
 ### 4.3. CDC Ingestion & Sink (Managed & Cloud Run Dual-Mode)
@@ -64,10 +64,10 @@ This is a **standalone pipeline** that operates independently from the existing 
     - Debezium PostgreSQL Source Connector
     - Google Managed Kafka auth library (GcpLoginCallbackHandler) for SASL/OAUTHBEARER
     - *Note: No BigQuery connector is needed in the image since sinks are fully managed.*
-13. Use **JSON** as the serialization format (`value.converter=org.apache.kafka.connect.json.JsonConverter`). No schema registry is required.
+13. Use **JSON** as the serialization format with schemas enabled (`value.converter.schemas.enable=true`). The Debezium source produces a typed schema envelope that the BigQuery sink uses to create properly typed RECORD columns. No schema registry is required.
 14. Configure the Debezium Source Connector to capture CDC events from all Chinook source tables.
 15. Configure the BigQuery Sink Connector to write CDC events to the Bronze layer tables.
-16. **GCS CDC Archive Sink:** Configure a GCS sink connector to archive all CDC events as JSONL (gzip) to GCS for long-term storage and replay.
+16. **GCS CDC Archive Sink:** Configure a GCS sink connector to archive all CDC events as JSON (uncompressed, readable format) to GCS for long-term storage and replay.
 
 ### 4.4. In-Flight Processing (SMTs)
 
@@ -79,21 +79,13 @@ This is a **standalone pipeline** that operates independently from the existing 
 
 18. Create three BigQuery datasets: `bronze`, `silver`, `gold`.
 19. **Bronze Layer:** Create append-only tables mirroring each Kafka topic (one per source table), containing the full Debezium envelope (`before`, `after`, `op`, `ts_ms`).
-20. **Silver Layer:** Create current-state tables for all 11 Chinook entities. Implement BigQuery Continuous Queries that:
-    - Read from Bronze tables
-    - Apply the latest record per natural key (`QUALIFY ROW_NUMBER() OVER(PARTITION BY <primary_key> ORDER BY ts_ms DESC) = 1`) or `MERGE` logic
-    - Convert Debezium soft deletes (`op = 'd'`) into a boolean `is_deleted` flag
-    - Lookup/reference tables (`genre`, `media_type`, `playlist`, `playlist_track`) use the same CQ pattern for consistency, even though they change infrequently
-21. **Gold Layer — Dimensions (SCD Type 2):** Create dimension tables (`dim_customer`, `dim_track`, `dim_employee`) with columns: `surrogate_key`, `natural_key`, `valid_from`, `valid_to`, `is_active`, plus entity attributes. The `dim_track` dimension denormalizes `album`, `artist`, `genre`, and `media_type` into a single wide table. Implement CQs that:
-    - **Read from the Silver layer** (already deduplicated and current-state)
-    - Close the existing active record (`valid_to = CURRENT_TIMESTAMP()`, `is_active = FALSE`) on update
-    - Insert a new active record with a new surrogate key on update
-    - Use `FARM_FINGERPRINT()` or `GENERATE_UUID()` for surrogate key generation
-22. **Gold Layer — Fact Tables:** Create fact tables (`fct_invoice`, `fct_invoice_line`) containing only surrogate keys (linking to dimensions) and measures. Implement CQs that:
-    - **Read from the Silver layer**
-    - Join incoming events against active dimension records using natural key
-    - Perform point-in-time–correct joins (transaction timestamp between `valid_from` and `valid_to`)
-    - Stream enriched results into the fact table via `INSERT`
+20. **Silver Layer:** Implement a hybrid current-state approach:
+    - **5 CQ-populated tables** (customer, employee, track, invoice, invoice_line) — BigQuery Continuous Queries using `APPENDS(TABLE, NULL)` that INSERT typed fields from the Bronze CDC envelope into Silver tables. These tables serve as streaming sources for Gold scheduled queries.
+    - **6 views on Bronze** (artist, album, genre, media_type, playlist, playlist_track) — reference/lookup data that rarely changes. Views use `QUALIFY ROW_NUMBER()` for current-state dedup without CQ overhead.
+    - All entities expose: `is_deleted` flag, `_source_ts_ms` (from Debezium `ts_ms`)
+21. **Gold Layer — Dimensions (SCD Type 2, Managed Apache Iceberg):** Create Iceberg-backed dimension tables stored as Parquet on GCS. Implement **scheduled queries** (every 5 minutes) instead of CQs because Iceberg tables do not support CQ destinations. Dimensions use JOINs instead of correlated subqueries (Iceberg limitation). `dim_track` denormalizes album, artist, genre, and media_type via LEFT JOINs.
+22. **Gold Layer — Facts (Managed Apache Iceberg):** Create Iceberg-backed fact tables. Implement scheduled queries that JOIN against current-state dimension subqueries for surrogate key resolution.
+22b. **Gold Layer — Current-State Views:** Create 5 views (`v_dim_customer`, `v_dim_employee`, `v_dim_track`, `v_fct_invoice`, `v_fct_invoice_line`) that provide current-state access to SCD2 dimensions and fact tables with resolved dimension names.
 
 ### 4.6. Infrastructure as Code (Terraform)
 
@@ -107,6 +99,8 @@ This is a **standalone pipeline** that operates independently from the existing 
     - GCS archive bucket
     - Optional Cloud Run service and Artifact Registry repository (if self-hosted source is toggled)
     - IAM bindings
+    - BigQuery Enterprise reservation (autoscale, CONTINUOUS job type)
+    - BigQuery Data Transfer scheduled queries for Gold layer
 24. All Terraform configuration must reside in the `infra/` directory.
 25. Use **local state** (`terraform.tfstate` file) — no remote backend required for the demo.
 
@@ -160,6 +154,7 @@ This is a **standalone pipeline** that operates independently from the existing 
 - **Terraform State:** Local `terraform.tfstate` file. No remote backend (GCS bucket) is needed for the demo.
 
 ### Constraints
+- **Managed Apache Iceberg tables** do not support BigQuery CQs as destinations, nor correlated subqueries in INSERT statements. Gold layer uses scheduled queries with JOIN-based SQL instead.
 - **BigQuery Continuous Queries** are a relatively new feature. CQ support for `MERGE` statements may be limited; the implementation may need to fall back to `INSERT`-based patterns with deduplication.
 - **Managed Kafka** and **Managed Kafka Connect** cluster provisioning can take 15–20 minutes. The deployment script must account for this.
 - **Cloud Run with "CPU always allocated"** is required because Kafka Connect is a long-running process, not a request-driven service.

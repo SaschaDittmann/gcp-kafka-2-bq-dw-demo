@@ -4,14 +4,15 @@
 # =============================================================================
 # Registers connectors to the split source/sink Kafka Connect services:
 #   - Debezium source connector → source service
-#   - BigQuery sink connector   → sink service
+#
+# NOTE: Only used for Cloud Run mode (source_connector_type=cloudrun).
+# BQ sink and GCS sink are always managed via Terraform (infra/kafka_connect.tf).
 #
 # Usage:
 #   ./connect/register-connectors.sh
 #
 # Required environment variables:
 #   SOURCE_CONNECT_URL  - Source service REST URL (default: http://localhost:8083)
-#   SINK_CONNECT_URL    - Sink service REST URL (default: http://localhost:8084)
 #   DB_HOST             - Cloud SQL private IP
 #   DB_REPL_USER        - Debezium replication user (default: debezium)
 #   DB_REPL_PASSWORD    - Debezium replication user password
@@ -26,7 +27,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_CONNECT_URL="${SOURCE_CONNECT_URL:-http://localhost:8083}"
-SINK_CONNECT_URL="${SINK_CONNECT_URL:-http://localhost:8084}"
 DB_HOST="${DB_HOST:?ERROR: DB_HOST environment variable is required}"
 DB_REPL_USER="${DB_REPL_USER:-debezium}"
 DB_REPL_PASSWORD="${DB_REPL_PASSWORD:?ERROR: DB_REPL_PASSWORD environment variable is required}"
@@ -160,7 +160,6 @@ echo ""
 # Step 1: Wait for both Connect services
 log_info "--- Waiting for Connect Services ---"
 wait_for_connect "${SOURCE_CONNECT_URL}" "Source service" || exit 1
-wait_for_connect "${SINK_CONNECT_URL}" "Sink service" || exit 1
 echo ""
 
 # Step 2: Register Debezium Source → Source service
@@ -168,16 +167,10 @@ log_info "--- Registering Debezium PostgreSQL Source Connector ---"
 register_connector "${SOURCE_CONNECT_URL}" "${SCRIPT_DIR}/debezium-source.json" || exit 1
 echo ""
 
-# Step 3: Register BigQuery Sink → Sink service
-log_info "--- Registering BigQuery Sink Connector ---"
-register_connector "${SINK_CONNECT_URL}" "${SCRIPT_DIR}/bigquery-sink.json" || exit 1
-echo ""
-
-# Step 4: Verify connector status
+# Step 3: Verify connector status
 log_info "--- Connector Status ---"
 sleep 5  # Brief pause for connectors to initialize
 check_connector_status "${SOURCE_CONNECT_URL}" "debezium-source"
-check_connector_status "${SINK_CONNECT_URL}" "bigquery-sink"
 
 echo ""
 log_success "All connectors registered successfully"

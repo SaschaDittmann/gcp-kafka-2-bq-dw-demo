@@ -1,14 +1,10 @@
 -- =============================================================================
--- Continuous Query: Silver → Gold — fct_invoice_line
+-- Scheduled Query: Silver → Gold — fct_invoice_line
 -- =============================================================================
 -- Enriches invoice line records with track and customer dimension keys.
+-- Runs every 5 minutes.
 --
--- Uses scalar subqueries for point-in-time dimension lookups:
--- - track_key from dim_track (active record)
--- - customer_key via invoice → dim_customer (active record)
--- - Computes line_total = unit_price × quantity
---
--- Run with: bq query --use_legacy_sql=false --continuous=true < transform/gold_fct_invoice_line.sql
+-- NOTE: Uses JOINs instead of correlated subqueries (Iceberg limitation).
 -- =============================================================================
 
 INSERT INTO `${PROJECT_ID}.gold.fct_invoice_line` (
@@ -20,24 +16,27 @@ INSERT INTO `${PROJECT_ID}.gold.fct_invoice_line` (
 SELECT
   il.invoice_line_id,
   il.invoice_id,
-  (SELECT dt.surrogate_key FROM `${PROJECT_ID}.gold.dim_track` dt
-   WHERE dt.natural_key = il.track_id
-     AND dt.is_active = TRUE
-   ORDER BY dt.valid_from DESC LIMIT 1)  AS track_key,
-  (SELECT dc.surrogate_key FROM `${PROJECT_ID}.gold.dim_customer` dc
-   INNER JOIN `${PROJECT_ID}.silver.invoice` inv
-     ON dc.natural_key = inv.customer_id AND inv.is_deleted = FALSE
-   WHERE inv.invoice_id = il.invoice_id
-     AND dc.is_active = TRUE
-   ORDER BY dc.valid_from DESC, inv._loaded_at DESC LIMIT 1) AS customer_key,
+  dt.surrogate_key       AS track_key,
+  dc.surrogate_key       AS customer_key,
   il.unit_price,
   il.quantity,
   il.unit_price * il.quantity AS line_total,
   il._loaded_at,
   il._source_ts_ms
-FROM APPENDS(
-  TABLE `${PROJECT_ID}.silver.invoice_line`,
-  CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE
-) AS il
-WHERE il.is_deleted = FALSE;
-
+FROM `${PROJECT_ID}.silver.invoice_line` AS il
+LEFT JOIN (
+  SELECT natural_key, surrogate_key
+  FROM `${PROJECT_ID}.gold.dim_track`
+  WHERE is_active = TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY natural_key ORDER BY valid_from DESC) = 1
+) dt ON dt.natural_key = il.track_id
+LEFT JOIN `${PROJECT_ID}.silver.invoice` inv
+  ON inv.invoice_id = il.invoice_id AND inv.is_deleted = FALSE
+LEFT JOIN (
+  SELECT natural_key, surrogate_key
+  FROM `${PROJECT_ID}.gold.dim_customer`
+  WHERE is_active = TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY natural_key ORDER BY valid_from DESC) = 1
+) dc ON dc.natural_key = inv.customer_id
+WHERE il.is_deleted = FALSE
+  AND il._loaded_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE);

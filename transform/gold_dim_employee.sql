@@ -1,5 +1,7 @@
 -- =============================================================================
--- Continuous Query: Silver → Gold — dim_employee (SCD Type 2)
+-- Scheduled Query: Silver → Gold — dim_employee (SCD Type 2)
+-- =============================================================================
+-- Runs every 5 minutes.
 -- =============================================================================
 
 INSERT INTO `${PROJECT_ID}.gold.dim_employee` (
@@ -30,9 +32,6 @@ SELECT
   TRUE                   AS is_active,
   _loaded_at,
   _source_ts_ms
-FROM APPENDS(
-  TABLE `${PROJECT_ID}.silver.employee`,
-  CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE
-)
-WHERE is_deleted = FALSE;
-
+FROM `${PROJECT_ID}.silver.employee`
+WHERE is_deleted = FALSE
+  AND _loaded_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE);

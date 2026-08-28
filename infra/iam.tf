@@ -63,7 +63,7 @@ locals {
     "roles/cloudsql.viewer",       # connectSettings API (instances.get)
     "roles/bigquery.dataEditor",   # Write records to BigQuery Bronze tables
     "roles/bigquery.jobUser",      # Run BigQuery load and query jobs
-    "roles/storage.objectCreator", # Write CDC archive files to GCS
+    "roles/storage.objectAdmin",   # Write/overwrite CDC archive files in GCS
   ]
 }
 

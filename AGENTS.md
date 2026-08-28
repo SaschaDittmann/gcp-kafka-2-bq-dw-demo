@@ -22,7 +22,7 @@ The data will be streamed by using Change Data Capture (CDC) to a Google Managed
 infra/              # Terraform configurations for GCP
 connect/            # Kafka Connect Dockerfile and source connector config (Cloud Run mode)
 scripts/            # Deployment and teardown shell scripts
-transform/          # BigQuery Continuous Query SQL scripts
+transform/          # BigQuery transformation SQL — CQs, scheduled queries, and views
 data/               # SQL schema, seed data, and database initialization scripts
 tests/              # End-to-end and integration tests
 docs/prds/          # Product Requirements Documents
@@ -36,9 +36,9 @@ docs/knowledge/     # Framework and library documentation (e.g., llms-full.txt f
 - **Data Sources** PostgreSQL hosted on Google Cloud SQL
 - **Ingestion:** Google Managed Kafka Connect (built-in CDC source, BigQuery sink, GCS archive sink)
 - **Ingestion (optional):** Cloud Run + Debezium for self-hosted CDC source (toggle via `source_connector_type`)
-- **Transformation:** BigQuery Continuous Queries
+- **Transformation:** BigQuery Continuous Queries (Silver) + Scheduled Queries (Gold)
 - **Cloud Database:** Google BigQuery
-- **CDC Archive:** Google Cloud Storage (JSONL, gzip compressed)
+- **CDC Archive:** Google Cloud Storage (JSON, uncompressed)
 - **Infrastructure:** Terraform for GCP resource provisioning
 - **Secrets:** Google Secret Manager for database credentials
 - **Containerization:** Cloud Build + Artifact Registry for Kafka Connect image (Cloud Run mode only)

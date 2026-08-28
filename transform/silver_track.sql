@@ -8,19 +8,19 @@ INSERT INTO `${PROJECT_ID}.silver.track` (
   is_deleted, _loaded_at, _source_ts_ms
 )
 SELECT
-  CAST(JSON_VALUE(after, '$.track_id') AS INT64)       AS track_id,
-  JSON_VALUE(after, '$.name')                          AS name,
-  CAST(JSON_VALUE(after, '$.album_id') AS INT64)       AS album_id,
-  CAST(JSON_VALUE(after, '$.media_type_id') AS INT64)  AS media_type_id,
-  CAST(JSON_VALUE(after, '$.genre_id') AS INT64)       AS genre_id,
-  JSON_VALUE(after, '$.composer')                      AS composer,
-  CAST(JSON_VALUE(after, '$.milliseconds') AS INT64)   AS milliseconds,
-  CAST(JSON_VALUE(after, '$.bytes') AS INT64)          AS bytes,
-  CAST(JSON_VALUE(after, '$.unit_price') AS FLOAT64)   AS unit_price,
+  after.track_id                                       AS track_id,
+  after.name                                           AS name,
+  after.album_id                                       AS album_id,
+  after.media_type_id                                  AS media_type_id,
+  after.genre_id                                       AS genre_id,
+  after.composer                                       AS composer,
+  after.milliseconds                                   AS milliseconds,
+  after.bytes                                          AS bytes,
+  after.unit_price                                     AS unit_price,
   IF(op = 'd', TRUE, FALSE)                           AS is_deleted,
   _CHANGE_TIMESTAMP                                    AS _loaded_at,
   ts_ms                                                AS _source_ts_ms
 FROM APPENDS(
   TABLE `${PROJECT_ID}.bronze.track_raw`,
-  CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE
+  NULL
 );

@@ -57,3 +57,58 @@ Before the connector can start CDC, the database needs:
 - `GRANT SELECT ON ALL TABLES IN SCHEMA public TO "service-PROJECT_NUMBER@gcp-sa-managedkafka.iam";`
 - `CREATE PUBLICATION debezium_publication FOR ALL TABLES;`
 - Logical replication slot created via `pg_create_logical_replication_slot()`
+
+## Debugging the BQ Sink Pipeline (2026-08-28)
+
+### Root Cause: `value.converter.schemas.enable`
+- The WePay BigQuery Sink Connector REQUIRES `value.converter.schemas.enable=true` on BOTH the CDC source AND the sink
+- Without it, the connector treats all records as 'tombstones' and throws `Could not convert to BigQuery schema with a batch of tombstone records`
+- The Google Cloud Console UI default for CDC source has `schemas.enable=true` — always match this
+- With `schemas.enable=true`, the BQ connector auto-creates tables with proper RECORD types for `before`, `after`, and `source` fields
+
+### Bronze Table Schema: RECORD vs STRING
+- With `schemas.enable=true`, bronze tables use RECORD types (e.g., `after.customer_id` is INTEGER, not JSON string)
+- CQ transforms must use struct access (`after.field`) instead of `JSON_VALUE(after, '$.field')`
+- Date/timestamp fields are already TIMESTAMP type — no need for `TIMESTAMP_MILLIS()`
+
+### Connect Offsets and Topic Prefix
+- Debezium source connector offsets are keyed by `topic.prefix`, NOT by connector name
+- Changing connector name alone does NOT trigger a new snapshot
+- To force a fresh snapshot: change `topic.prefix` (e.g., from `chinook` to `cdc`) to get new offset keys
+- The Connect internal topics (configs, offsets, status) should NEVER be deleted — it corrupts the Connect worker state permanently
+- If Connect worker gets stuck with 'Timeout while reading log to end for topic connect-offsets-...', the Connect cluster must be recreated
+
+### Managed Kafka Connect Gotchas
+- Topics must be pre-created; auto.create.topics.enable may be disabled
+- `consumer.override.auto.offset.reset` may not be supported by the managed service
+- The managed service auto-recreates deleted internal topics but the worker may not recover
+- `task_restart_policy` is auto-set by GCP; use `lifecycle { ignore_changes }` in Terraform
+
+## BigQuery Reservation & Gold Layer (2026-08-28)
+
+### BigQuery Enterprise Reservation for CQs
+- CQs require BigQuery Enterprise edition with slot reservations
+- Use autoscaling reservation: `slot_capacity = 0` + `autoscale { max_slots = 100 }` — no upfront commitment
+- The reservation assignment must use `job_type = "CONTINUOUS"` (not `QUERY`) — can't mix both in one reservation
+- `FLEX_FLAT_RATE` plan is sunset — use autoscale instead of capacity commitments
+
+### Managed Apache Iceberg Limitations
+- Iceberg tables (BigLake with `biglake_configuration`) do NOT support CQs as destinations: 'BigQuery tables for Apache Iceberg do not support as destinations for continuous queries'
+- Iceberg tables do NOT support correlated subqueries in INSERT statements — rewrite using JOINs
+- Solution: Use BigQuery Data Transfer scheduled queries (every 5 min) instead of CQs for Silver → Gold
+
+### Silver Layer: CQ `APPENDS()` Start Timestamp
+- `APPENDS(TABLE, CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE)` only captures rows from the last 10 minutes
+- On fresh deploy, initial CDC snapshot data is missed because it loads before CQs start
+- Fix: Use `APPENDS(TABLE, NULL)` — processes ALL existing data + streams new data
+- CQs maintain internal watermarks, so they won't reprocess on restart
+
+### Bronze Table Schema (Auto-Created)
+- Auto-created bronze tables have NO `_loaded_at` column (it was a Terraform-managed addition)
+- Actual columns: `before` (RECORD), `after` (RECORD), `source` (RECORD), `transaction` (RECORD), `op` (STRING), `ts_ms`, `ts_us`, `ts_ns` (INTEGER)
+- Silver views must use `ts_ms` for ordering, not `_loaded_at`
+
+### Gold Current-State Views
+- Created 5 views for easy querying of current state: `v_dim_customer`, `v_dim_employee`, `v_dim_track`, `v_fct_invoice`, `v_fct_invoice_line`
+- Dimension views: filter `WHERE is_active = TRUE` + `QUALIFY ROW_NUMBER()` for latest SCD2 version
+- Fact views: JOIN with dim views to resolve surrogate keys to human-readable names

@@ -1,12 +1,10 @@
 -- =============================================================================
--- Continuous Query: Silver → Gold — fct_invoice
+-- Scheduled Query: Silver → Gold — fct_invoice
 -- =============================================================================
 -- Enriches invoice records with customer dimension surrogate keys.
+-- Runs every 5 minutes.
 --
--- Uses scalar subquery to look up the active dim_customer record
--- at the time of the invoice for point-in-time correctness.
---
--- Run with: bq query --use_legacy_sql=false --continuous=true < transform/gold_fct_invoice.sql
+-- NOTE: Uses JOIN instead of correlated subquery (Iceberg limitation).
 -- =============================================================================
 
 INSERT INTO `${PROJECT_ID}.gold.fct_invoice` (
@@ -17,10 +15,7 @@ INSERT INTO `${PROJECT_ID}.gold.fct_invoice` (
 )
 SELECT
   i.invoice_id,
-  (SELECT dc.surrogate_key FROM `${PROJECT_ID}.gold.dim_customer` dc
-   WHERE dc.natural_key = i.customer_id
-     AND dc.is_active = TRUE
-   ORDER BY dc.valid_from DESC LIMIT 1)  AS customer_key,
+  dc.surrogate_key       AS customer_key,
   i.invoice_date,
   i.billing_address,
   i.billing_city,
@@ -30,9 +25,12 @@ SELECT
   i.total,
   i._loaded_at,
   i._source_ts_ms
-FROM APPENDS(
-  TABLE `${PROJECT_ID}.silver.invoice`,
-  CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE
-) AS i
-WHERE i.is_deleted = FALSE;
-
+FROM `${PROJECT_ID}.silver.invoice` AS i
+LEFT JOIN (
+  SELECT natural_key, surrogate_key
+  FROM `${PROJECT_ID}.gold.dim_customer`
+  WHERE is_active = TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY natural_key ORDER BY valid_from DESC) = 1
+) dc ON dc.natural_key = i.customer_id
+WHERE i.is_deleted = FALSE
+  AND i._loaded_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE);

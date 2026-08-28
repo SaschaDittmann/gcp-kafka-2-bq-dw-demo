@@ -86,9 +86,9 @@ def test_kafka_tf_has_topic_for_table(kafka_tf, table_name):
 
 
 def test_kafka_tf_uses_debezium_topic_naming(kafka_tf):
-    pattern = r"chinook\.public\."
+    pattern = r"cdc\.public\."
     assert re.search(pattern, kafka_tf), (
-        "Topics must follow Debezium naming: 'chinook.public.<table>'"
+        "Topics must follow Debezium naming: 'cdc.public.<table>'"
     )
 
 

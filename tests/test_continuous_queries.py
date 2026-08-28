@@ -1,15 +1,16 @@
-"""Tests for Task 5.x: Continuous Query SQL Validation.
+"""Tests for Task 5.x: Transform SQL Validation.
 
 Validates:
-- All CQ SQL scripts exist in transform/
-- Each CQ references the correct source and target tables
-- SQL uses INSERT INTO ... SELECT FROM APPENDS() pattern
-- dim_track CQ joins album, artist, genre, and media_type
-- Fact CQs reference dimension surrogate keys
+- All Silver CQ and Gold scheduled query SQL scripts exist in transform/
+- Each script references the correct source and target tables
+- Silver CQs use INSERT INTO ... SELECT FROM APPENDS() pattern
+- Gold scheduled queries use INSERT INTO ... SELECT with time-windowed WHERE
+- dim_track joins album, artist, genre, and media_type
+- Fact queries reference dimension surrogate keys
+- Gold current-state views exist
 """
 
 import os
-import re
 
 import pytest
 
@@ -42,6 +43,15 @@ SILVER_CQ_FILES = [
 # Reference/lookup tables use views on Bronze (no CQ scripts needed):
 # artist, album, genre, media_type, playlist, playlist_track
 
+SILVER_VIEW_FILES = [
+    "silver_artist.sql",
+    "silver_album.sql",
+    "silver_genre.sql",
+    "silver_media_type.sql",
+    "silver_playlist.sql",
+    "silver_playlist_track.sql",
+]
+
 
 @pytest.mark.parametrize("filename", SILVER_CQ_FILES)
 def test_silver_cq_file_exists(filename):
@@ -49,11 +59,17 @@ def test_silver_cq_file_exists(filename):
     assert os.path.isfile(filepath), f"Missing CQ script: {filename}"
 
 
+@pytest.mark.parametrize("filename", SILVER_VIEW_FILES)
+def test_silver_view_file_exists(filename):
+    filepath = os.path.join(TRANSFORM_DIR, filename)
+    assert os.path.isfile(filepath), f"Missing Silver view script: {filename}"
+
+
 # =========================================================================
-# Happy Path: All Gold CQ scripts exist
+# Happy Path: All Gold scheduled query scripts exist
 # =========================================================================
 
-GOLD_CQ_FILES = [
+GOLD_SQ_FILES = [
     "gold_dim_customer.sql",
     "gold_dim_track.sql",
     "gold_dim_employee.sql",
@@ -61,11 +77,25 @@ GOLD_CQ_FILES = [
     "gold_fct_invoice_line.sql",
 ]
 
+GOLD_VIEW_FILES = [
+    "gold_v_dim_customer.sql",
+    "gold_v_dim_employee.sql",
+    "gold_v_dim_track.sql",
+    "gold_v_fct_invoice.sql",
+    "gold_v_fct_invoice_line.sql",
+]
 
-@pytest.mark.parametrize("filename", GOLD_CQ_FILES)
-def test_gold_cq_file_exists(filename):
+
+@pytest.mark.parametrize("filename", GOLD_SQ_FILES)
+def test_gold_sq_file_exists(filename):
     filepath = os.path.join(TRANSFORM_DIR, filename)
-    assert os.path.isfile(filepath), f"Missing CQ script: {filename}"
+    assert os.path.isfile(filepath), f"Missing Gold scheduled query script: {filename}"
+
+
+@pytest.mark.parametrize("filename", GOLD_VIEW_FILES)
+def test_gold_view_file_exists(filename):
+    filepath = os.path.join(TRANSFORM_DIR, filename)
+    assert os.path.isfile(filepath), f"Missing Gold view script: {filename}"
 
 
 # =========================================================================
@@ -94,22 +124,19 @@ def test_silver_cq_source_and_target(filename, tables):
 
 
 # =========================================================================
-# Happy Path: All CQs use INSERT INTO ... APPENDS() pattern
+# Happy Path: Silver CQs use INSERT INTO ... APPENDS() pattern
 # =========================================================================
 
-ALL_CQ_FILES = SILVER_CQ_FILES + GOLD_CQ_FILES
-
-
-@pytest.mark.parametrize("filename", ALL_CQ_FILES)
-def test_cq_uses_insert_into(filename):
+@pytest.mark.parametrize("filename", SILVER_CQ_FILES)
+def test_silver_cq_uses_insert_into(filename):
     sql = load_sql(filename)
     assert "INSERT INTO" in sql.upper(), (
         f"{filename} must use INSERT INTO pattern"
     )
 
 
-@pytest.mark.parametrize("filename", ALL_CQ_FILES)
-def test_cq_uses_appends(filename):
+@pytest.mark.parametrize("filename", SILVER_CQ_FILES)
+def test_silver_cq_uses_appends(filename):
     sql = load_sql(filename)
     assert "APPENDS(" in sql.upper() or "APPENDS(" in sql, (
         f"{filename} must use APPENDS() table-valued function"
@@ -117,14 +144,43 @@ def test_cq_uses_appends(filename):
 
 
 # =========================================================================
-# Happy Path: Silver CQs extract from JSON 'after' payload
+# Happy Path: Gold scheduled queries use INSERT INTO with time window
+# =========================================================================
+
+@pytest.mark.parametrize("filename", GOLD_SQ_FILES)
+def test_gold_sq_uses_insert_into(filename):
+    sql = load_sql(filename)
+    assert "INSERT INTO" in sql.upper(), (
+        f"{filename} must use INSERT INTO pattern"
+    )
+
+
+@pytest.mark.parametrize("filename", GOLD_SQ_FILES)
+def test_gold_sq_uses_time_window(filename):
+    sql = load_sql(filename)
+    assert "TIMESTAMP_SUB" in sql or "CURRENT_TIMESTAMP" in sql, (
+        f"{filename} must use a time-windowed WHERE clause for incremental loading"
+    )
+
+
+@pytest.mark.parametrize("filename", GOLD_SQ_FILES)
+def test_gold_sq_no_appends(filename):
+    """Gold scheduled queries must NOT use APPENDS() — Iceberg tables don't support CQs."""
+    sql = load_sql(filename)
+    assert "APPENDS(" not in sql.upper(), (
+        f"{filename} must not use APPENDS() — Iceberg tables do not support CQ destinations"
+    )
+
+
+# =========================================================================
+# Happy Path: Silver CQs extract from 'after' struct payload
 # =========================================================================
 
 @pytest.mark.parametrize("filename", SILVER_CQ_FILES)
-def test_silver_cq_uses_json_value(filename):
+def test_silver_cq_uses_after_struct(filename):
     sql = load_sql(filename)
-    assert "JSON_VALUE(after" in sql, (
-        f"{filename} must extract fields from 'after' JSON payload"
+    assert "after." in sql, (
+        f"{filename} must extract fields from 'after' RECORD struct (e.g., after.field_name)"
     )
 
 
@@ -167,28 +223,28 @@ def test_silver_cq_has_source_ts_ms(filename):
 def test_dim_track_joins_album():
     sql = load_sql("gold_dim_track.sql")
     assert "silver.album" in sql, (
-        "dim_track CQ must reference silver.album"
+        "dim_track must reference silver.album"
     )
 
 
 def test_dim_track_joins_artist():
     sql = load_sql("gold_dim_track.sql")
     assert "silver.artist" in sql, (
-        "dim_track CQ must reference silver.artist"
+        "dim_track must reference silver.artist"
     )
 
 
 def test_dim_track_joins_genre():
     sql = load_sql("gold_dim_track.sql")
     assert "silver.genre" in sql, (
-        "dim_track CQ must reference silver.genre"
+        "dim_track must reference silver.genre"
     )
 
 
 def test_dim_track_joins_media_type():
     sql = load_sql("gold_dim_track.sql")
     assert "silver.media_type" in sql, (
-        "dim_track CQ must reference silver.media_type"
+        "dim_track must reference silver.media_type"
     )
 
 
@@ -220,7 +276,7 @@ def test_gold_dim_sets_is_active(filename):
 
 
 # =========================================================================
-# Happy Path: Fact CQs reference dimension keys
+# Happy Path: Fact queries reference dimension keys
 # =========================================================================
 
 def test_fct_invoice_references_dim_customer():
@@ -250,3 +306,32 @@ def test_fct_invoice_line_computes_line_total():
         "fct_invoice_line must compute line_total"
     )
 
+
+# =========================================================================
+# Happy Path: Gold views use current-state patterns
+# =========================================================================
+
+@pytest.mark.parametrize("filename", [
+    "gold_v_dim_customer.sql",
+    "gold_v_dim_employee.sql",
+    "gold_v_dim_track.sql",
+])
+def test_gold_dim_view_filters_active(filename):
+    sql = load_sql(filename)
+    assert "is_active = TRUE" in sql, (
+        f"{filename} must filter for active records"
+    )
+    assert "ROW_NUMBER()" in sql, (
+        f"{filename} must use ROW_NUMBER() for dedup"
+    )
+
+
+@pytest.mark.parametrize("filename", [
+    "gold_v_fct_invoice.sql",
+    "gold_v_fct_invoice_line.sql",
+])
+def test_gold_fact_view_joins_dims(filename):
+    sql = load_sql(filename)
+    assert "v_dim_customer" in sql, (
+        f"{filename} must join with v_dim_customer view"
+    )

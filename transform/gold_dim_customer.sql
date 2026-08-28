@@ -1,14 +1,10 @@
 -- =============================================================================
--- Continuous Query: Silver → Gold — dim_customer (SCD Type 2)
+-- Scheduled Query: Silver → Gold — dim_customer (SCD Type 2)
 -- =============================================================================
--- Streams customer changes from the Silver layer into the Gold dimension.
--- Each change creates a new active record with a new surrogate key.
+-- Runs every 5 minutes. Inserts new customer versions from Silver into Gold.
+-- Uses a 10-minute lookback window (2× interval for overlap safety).
 --
--- NOTE: BigQuery CQs are INSERT-only. SCD Type 2 close-out (setting
--- valid_to and is_active=FALSE on the previous record) is handled by
--- a scheduled query or a view with QUALIFY ROW_NUMBER().
---
--- Run with: bq query --use_legacy_sql=false --continuous=true < transform/gold_dim_customer.sql
+-- Run manually: bq query --use_legacy_sql=false < transform/gold_dim_customer.sql
 -- =============================================================================
 
 INSERT INTO `${PROJECT_ID}.gold.dim_customer` (
@@ -36,9 +32,6 @@ SELECT
   TRUE                   AS is_active,
   _loaded_at,
   _source_ts_ms
-FROM APPENDS(
-  TABLE `${PROJECT_ID}.silver.customer`,
-  CURRENT_TIMESTAMP() - INTERVAL 10 MINUTE
-)
-WHERE is_deleted = FALSE;
-
+FROM `${PROJECT_ID}.silver.customer`
+WHERE is_deleted = FALSE
+  AND _loaded_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE);

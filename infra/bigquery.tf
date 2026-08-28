@@ -46,34 +46,43 @@ resource "google_bigquery_dataset" "gold" {
 }
 
 # =============================================================================
-# Bronze Layer Tables — Raw Debezium CDC Events
+# BigQuery Reservation — Enterprise Slots for Continuous Queries
 # =============================================================================
-# Each table stores the full Debezium envelope: before, after, op, ts_ms, source
-# The BigQuery Sink connector writes directly to these tables.
+# CQs require BigQuery Enterprise edition with slot reservations.
+# Using autoscaling: no upfront commitment, billed per-second for slots used.
 # =============================================================================
 
-locals {
-  bronze_tables = toset(local.chinook_tables)
+resource "google_bigquery_reservation" "default" {
+  name          = "cdc-demo-reservation"
+  project       = var.project_id
+  location      = var.region
+  slot_capacity = 0
+  edition       = "ENTERPRISE"
+
+  autoscale {
+    max_slots = 100
+  }
 }
 
-resource "google_bigquery_table" "bronze" {
-  for_each = local.bronze_tables
-
-  dataset_id          = google_bigquery_dataset.bronze.dataset_id
-  table_id            = "${each.value}_raw"
-  description         = "Raw CDC events for ${each.value} table"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  schema = jsonencode([
-    { name = "before",        type = "STRING", mode = "NULLABLE", description = "Row state before the change (JSON)" },
-    { name = "after",         type = "STRING", mode = "NULLABLE", description = "Row state after the change (JSON)" },
-    { name = "op",            type = "STRING", mode = "NULLABLE", description = "Operation: c=create, u=update, d=delete, r=read(snapshot)" },
-    { name = "ts_ms",         type = "INTEGER", mode = "NULLABLE", description = "Debezium event timestamp in milliseconds" },
-    { name = "source",        type = "STRING", mode = "NULLABLE", description = "Source metadata (JSON): database, schema, table, LSN" },
-    { name = "_loaded_at",    type = "TIMESTAMP", mode = "NULLABLE", description = "Timestamp when the record was loaded into BigQuery" },
-  ])
+resource "google_bigquery_reservation_assignment" "default" {
+  project     = var.project_id
+  location    = var.region
+  reservation = google_bigquery_reservation.default.id
+  assignee    = "projects/${var.project_id}"
+  job_type    = "CONTINUOUS"
 }
+
+# =============================================================================
+# Bronze Layer Tables — Auto-created by BigQuery Sink Connector
+# =============================================================================
+# The BQ sink connector auto-creates tables (autoCreateTables=true) with the
+# correct schema inferred from the Debezium CDC envelope. Table names follow
+# the pattern: {table}_raw (via RegexRouter SMT).
+#
+# Schema is derived from the Debezium source schema with value.converter
+# schemas.enable=true, which produces properly typed RECORD columns for
+# the `before`, `after`, and `source` envelope fields.
+# =============================================================================
 
 # =============================================================================
 # Silver Layer Tables — Current-State Entity Tables
@@ -141,168 +150,15 @@ resource "google_bigquery_table" "silver_employee" {
 # =============================================================================
 # These tables change rarely (genre, media_type, artist, album, playlist,
 # playlist_track). Instead of running continuous CQs, we use views on Bronze
-# with QUALIFY ROW_NUMBER() to extract the latest state. This saves compute
-# while providing the same current-state interface.
+# with QUALIFY ROW_NUMBER() to extract the latest state.
+#
+# Views are defined as SQL scripts in transform/silver_*.sql and deployed
+# after the BQ sink connector creates the Bronze tables. This avoids a
+# dependency on auto-created tables during terraform apply.
+#
+# See: transform/silver_artist.sql, silver_album.sql, silver_genre.sql,
+#      silver_media_type.sql, silver_playlist.sql, silver_playlist_track.sql
 # =============================================================================
-
-# --- artist (view) ---
-resource "google_bigquery_table" "silver_artist" {
-  dataset_id          = google_bigquery_dataset.silver.dataset_id
-  table_id            = "artist"
-  description         = "Current-state artist records (view on Bronze)"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  view {
-    query          = <<-SQL
-      SELECT
-        CAST(JSON_VALUE(after, '$.artist_id') AS INT64)  AS artist_id,
-        JSON_VALUE(after, '$.name')                      AS name,
-        IF(op = 'd', TRUE, FALSE)                        AS is_deleted,
-        _loaded_at,
-        ts_ms                                            AS _source_ts_ms
-      FROM `${var.project_id}.bronze.artist_raw`
-      QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY CAST(JSON_VALUE(after, '$.artist_id') AS INT64)
-        ORDER BY _loaded_at DESC, ts_ms DESC
-      ) = 1
-    SQL
-    use_legacy_sql = false
-  }
-}
-
-# --- album (view) ---
-resource "google_bigquery_table" "silver_album" {
-  dataset_id          = google_bigquery_dataset.silver.dataset_id
-  table_id            = "album"
-  description         = "Current-state album records (view on Bronze)"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  view {
-    query          = <<-SQL
-      SELECT
-        CAST(JSON_VALUE(after, '$.album_id') AS INT64)   AS album_id,
-        JSON_VALUE(after, '$.title')                     AS title,
-        CAST(JSON_VALUE(after, '$.artist_id') AS INT64)  AS artist_id,
-        IF(op = 'd', TRUE, FALSE)                        AS is_deleted,
-        _loaded_at,
-        ts_ms                                            AS _source_ts_ms
-      FROM `${var.project_id}.bronze.album_raw`
-      QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY CAST(JSON_VALUE(after, '$.album_id') AS INT64)
-        ORDER BY _loaded_at DESC, ts_ms DESC
-      ) = 1
-    SQL
-    use_legacy_sql = false
-  }
-}
-
-# --- genre (view) ---
-resource "google_bigquery_table" "silver_genre" {
-  dataset_id          = google_bigquery_dataset.silver.dataset_id
-  table_id            = "genre"
-  description         = "Current-state genre records (view on Bronze)"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  view {
-    query          = <<-SQL
-      SELECT
-        CAST(JSON_VALUE(after, '$.genre_id') AS INT64)  AS genre_id,
-        JSON_VALUE(after, '$.name')                     AS name,
-        IF(op = 'd', TRUE, FALSE)                       AS is_deleted,
-        _loaded_at,
-        ts_ms                                           AS _source_ts_ms
-      FROM `${var.project_id}.bronze.genre_raw`
-      QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY CAST(JSON_VALUE(after, '$.genre_id') AS INT64)
-        ORDER BY _loaded_at DESC, ts_ms DESC
-      ) = 1
-    SQL
-    use_legacy_sql = false
-  }
-}
-
-# --- media_type (view) ---
-resource "google_bigquery_table" "silver_media_type" {
-  dataset_id          = google_bigquery_dataset.silver.dataset_id
-  table_id            = "media_type"
-  description         = "Current-state media type records (view on Bronze)"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  view {
-    query          = <<-SQL
-      SELECT
-        CAST(JSON_VALUE(after, '$.media_type_id') AS INT64)  AS media_type_id,
-        JSON_VALUE(after, '$.name')                          AS name,
-        IF(op = 'd', TRUE, FALSE)                            AS is_deleted,
-        _loaded_at,
-        ts_ms                                                AS _source_ts_ms
-      FROM `${var.project_id}.bronze.media_type_raw`
-      QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY CAST(JSON_VALUE(after, '$.media_type_id') AS INT64)
-        ORDER BY _loaded_at DESC, ts_ms DESC
-      ) = 1
-    SQL
-    use_legacy_sql = false
-  }
-}
-
-# --- playlist (view) ---
-resource "google_bigquery_table" "silver_playlist" {
-  dataset_id          = google_bigquery_dataset.silver.dataset_id
-  table_id            = "playlist"
-  description         = "Current-state playlist records (view on Bronze)"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  view {
-    query          = <<-SQL
-      SELECT
-        CAST(JSON_VALUE(after, '$.playlist_id') AS INT64)  AS playlist_id,
-        JSON_VALUE(after, '$.name')                        AS name,
-        IF(op = 'd', TRUE, FALSE)                          AS is_deleted,
-        _loaded_at,
-        ts_ms                                              AS _source_ts_ms
-      FROM `${var.project_id}.bronze.playlist_raw`
-      QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY CAST(JSON_VALUE(after, '$.playlist_id') AS INT64)
-        ORDER BY _loaded_at DESC, ts_ms DESC
-      ) = 1
-    SQL
-    use_legacy_sql = false
-  }
-}
-
-# --- playlist_track (view) ---
-resource "google_bigquery_table" "silver_playlist_track" {
-  dataset_id          = google_bigquery_dataset.silver.dataset_id
-  table_id            = "playlist_track"
-  description         = "Current-state playlist-track associations (view on Bronze)"
-  deletion_protection = false
-  labels              = local.common_labels
-
-  view {
-    query          = <<-SQL
-      SELECT
-        CAST(JSON_VALUE(after, '$.playlist_id') AS INT64)  AS playlist_id,
-        CAST(JSON_VALUE(after, '$.track_id') AS INT64)     AS track_id,
-        IF(op = 'd', TRUE, FALSE)                          AS is_deleted,
-        _loaded_at,
-        ts_ms                                              AS _source_ts_ms
-      FROM `${var.project_id}.bronze.playlist_track_raw`
-      QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY
-          CAST(JSON_VALUE(after, '$.playlist_id') AS INT64),
-          CAST(JSON_VALUE(after, '$.track_id') AS INT64)
-        ORDER BY _loaded_at DESC, ts_ms DESC
-      ) = 1
-    SQL
-    use_legacy_sql = false
-  }
-}
 
 # =============================================================================
 # Silver Layer Tables — Core Entity Tables (Persistent via CQ)
@@ -583,4 +439,93 @@ resource "google_bigquery_table" "gold_fct_invoice_line" {
     { name = "_loaded_at",      type = "TIMESTAMP", mode = "REQUIRED" },
     { name = "_source_ts_ms",   type = "INTEGER",   mode = "NULLABLE" },
   ])
+}
+
+# =============================================================================
+# Gold Layer — Scheduled Queries (every 5 minutes)
+# =============================================================================
+# Gold tables use Managed Iceberg (BigLake), which does NOT support CQs.
+# Instead, we use BigQuery scheduled queries running every 5 minutes.
+# Dimension tables run first; fact tables depend on dims for surrogate keys.
+# =============================================================================
+
+locals {
+  gold_sql_dir = "${path.module}/../transform"
+}
+
+resource "google_bigquery_data_transfer_config" "gold_dim_customer" {
+  display_name   = "Gold: dim_customer (every 5 min)"
+  location       = var.region
+  data_source_id = "scheduled_query"
+  schedule               = "every 5 minutes"
+  service_account_name   = google_service_account.kafka_connect.email
+
+  params = {
+    query = replace(file("${local.gold_sql_dir}/gold_dim_customer.sql"), "$${PROJECT_ID}", var.project_id)
+  }
+
+  depends_on = [google_bigquery_table.gold_dim_customer]
+}
+
+resource "google_bigquery_data_transfer_config" "gold_dim_employee" {
+  display_name   = "Gold: dim_employee (every 5 min)"
+  location       = var.region
+  data_source_id = "scheduled_query"
+  schedule       = "every 5 minutes"
+  service_account_name   = google_service_account.kafka_connect.email
+
+  params = {
+    query = replace(file("${local.gold_sql_dir}/gold_dim_employee.sql"), "$${PROJECT_ID}", var.project_id)
+  }
+
+  depends_on = [google_bigquery_table.gold_dim_employee]
+}
+
+resource "google_bigquery_data_transfer_config" "gold_dim_track" {
+  display_name   = "Gold: dim_track (every 5 min)"
+  location       = var.region
+  data_source_id = "scheduled_query"
+  schedule       = "every 5 minutes"
+  service_account_name   = google_service_account.kafka_connect.email
+
+  params = {
+    query = replace(file("${local.gold_sql_dir}/gold_dim_track.sql"), "$${PROJECT_ID}", var.project_id)
+  }
+
+  depends_on = [google_bigquery_table.gold_dim_track]
+}
+
+resource "google_bigquery_data_transfer_config" "gold_fct_invoice" {
+  display_name   = "Gold: fct_invoice (every 5 min)"
+  location       = var.region
+  data_source_id = "scheduled_query"
+  schedule       = "every 5 minutes"
+  service_account_name   = google_service_account.kafka_connect.email
+
+  params = {
+    query = replace(file("${local.gold_sql_dir}/gold_fct_invoice.sql"), "$${PROJECT_ID}", var.project_id)
+  }
+
+  depends_on = [
+    google_bigquery_table.gold_fct_invoice,
+    google_bigquery_data_transfer_config.gold_dim_customer,
+  ]
+}
+
+resource "google_bigquery_data_transfer_config" "gold_fct_invoice_line" {
+  display_name   = "Gold: fct_invoice_line (every 5 min)"
+  location       = var.region
+  data_source_id = "scheduled_query"
+  schedule       = "every 5 minutes"
+  service_account_name   = google_service_account.kafka_connect.email
+
+  params = {
+    query = replace(file("${local.gold_sql_dir}/gold_fct_invoice_line.sql"), "$${PROJECT_ID}", var.project_id)
+  }
+
+  depends_on = [
+    google_bigquery_table.gold_fct_invoice_line,
+    google_bigquery_data_transfer_config.gold_dim_customer,
+    google_bigquery_data_transfer_config.gold_dim_track,
+  ]
 }

@@ -17,7 +17,7 @@ The OLTP demo database is hosted on Cloud SQL.
 ### 2.2. Streaming Broker: Google Managed Service for Apache Kafka
 Serves as the central message broker.
 *   **Setup:** Provision a Google Managed Kafka cluster.
-*   **Topics:** Configure dedicated topics per source table (e.g., `oltp.public.customers`, `oltp.public.orders`).
+*   **Topics:** Configure dedicated topics per source table (e.g., `cdc.public.customers`, `cdc.public.orders`).
 *   **Security:** IAM-based setup. The Service Account associated with the Kafka Connect runtime requires appropriate roles (e.g., `roles/managedkafka.client`).
 
 ### 2.3. CDC Ingestion & Sink: Kafka Connect on Cloud Run
@@ -35,40 +35,45 @@ The logic for filtering messages and removing specific properties is handled ent
 *   **Removing Properties:** Use the `ReplaceField$Value` SMT (e.g., `transforms.MaskFields.type=org.apache.kafka.connect.transforms.ReplaceField$Value`, followed by `transforms.MaskFields.exclude=credit_card,ssn`).
 *   **Filtering Messages:** Use the `Filter` SMT (e.g., `org.apache.kafka.connect.transforms.Filter`) to exclude messages from being written to the BigQuery sink based on payload criteria (e.g., specific record types or status updates).
 
-## 3. Data Warehouse Layer: BigQuery Continuous Queries (CQ)
-The BigQuery Sink Connector continuously writes the cleansed JSON/Avro messages into BigQuery. From this point on, BigQuery Continuous Queries take over the real-time transformations.
+## 3. Data Warehouse Layer: BigQuery Continuous Queries (CQ) & Scheduled Queries
+The BigQuery Sink Connector continuously writes the records into BigQuery. It is configured with `value.converter.schemas.enable=true`, which produces properly typed RECORD columns. From this point on, BigQuery Continuous Queries and Scheduled Queries take over the real-time transformations.
 
 ### 3.1. Bronze Layer (Raw Data)
 *   **Structure:** Append-only tables that represent a 1:1 reflection of the Kafka topics.
-*   **Content:** Contains the standard Debezium payload (`before`, `after`, `op` [Create, Update, Delete], `ts_ms`).
+*   **Content:** Contains the standard Debezium payload (`before`, `after`, `op` [Create, Update, Delete], `ts_ms`) stored as typed RECORD/struct columns instead of JSON.
 *   **Setup:** Native BigQuery tables (not external tables).
 
 ### 3.2. Silver Layer (Cleansed / Current State)
 *   **Goal:** Provide the current state of the OLTP entities without historical data.
-*   **CQ Implementation:**
-    *   A Continuous Query continuously reads from the Bronze table.
+*   **Hybrid Approach:** The layer uses a hybrid approach: 5 tables populated by Continuous Queries for complex transformations, and 6 views directly on the Bronze tables for simpler state representations.
+*   **Implementation:**
+    *   Since Bronze tables use RECORD/struct columns, Silver accesses the fields directly via `after.field_name` struct access instead of parsing JSON (`JSON_VALUE`).
+    *   For the CQ-populated tables, a Continuous Query continuously reads from the Bronze table.
     *   It uses `MERGE` statements (if fully supported by CQ in the demo phase) or calculates the latest record per key (`QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY ts_ms DESC) = 1`) to update the Silver tables.
     *   Soft deletes (`op = 'd'`) from Debezium are converted into a boolean flag (`is_deleted = TRUE`).
 
 ### 3.3. Gold Layer (Star Schema & SCD Type 2)
-The Gold Layer provides real-time data for analytics and dashboards.
+The Gold Layer provides real-time data for analytics and dashboards. It uses **Scheduled Queries** (every 5 minutes) rather than Continuous Queries because Iceberg tables don't support CQs.
 
 **Dimensions (SCD Type 2):**
 *   **Structure:** Tables containing the columns `surrogate_key`, `natural_key`, `valid_from`, `valid_to`, `is_active`.
 *   **Surrogate Keys:** Since incremental IDs are difficult to manage in distributed streaming, hashes are used. Generate them using `FARM_FINGERPRINT(CAST(natural_key AS STRING))` or `GENERATE_UUID()` if deterministic keys are not strictly required.
-*   **CQ Implementation for SCD2:**
-    *   The CQ monitors the Silver (or directly Bronze) layer.
-    *   Upon receiving an entity update (`op = 'u'`), the CQ performs two actions:
+*   **Scheduled Query Implementation for SCD2:**
+    *   A Scheduled Query (running every 5 minutes) monitors the Silver (or directly Bronze) layer.
+    *   Upon receiving an entity update (`op = 'u'`), the Scheduled Query performs two actions:
         1.  Closes the existing active record (updates `valid_to` to `CURRENT_TIMESTAMP()` and sets `is_active = FALSE`).
         2.  Inserts the new record as a new row with a new surrogate key, `valid_from = CURRENT_TIMESTAMP()`, and `is_active = TRUE`.
 
 **Fact Tables:**
 *   **Structure:** Classic fact tables containing only surrogate keys (linking to dimensions) and metrics/measures.
-*   **CQ Implementation:**
-    *   A CQ processes incoming transaction events (e.g., new orders).
+*   **Scheduled Query Implementation:**
+    *   A Scheduled Query (running every 5 minutes) processes incoming transaction events (e.g., new orders).
     *   The statement joins the incoming row against the *dimension tables* based on the natural key.
     *   **Crucial:** The join must be point-in-time correct. The transaction timestamp must fall between the `valid_from` and `valid_to` of the SCD2 dimension to fetch the correct surrogate key valid at the exact time of the transaction.
-    *   The CQ streams the enriched result (via INSERT) into the final fact table.
+    *   The Scheduled Query streams the enriched result (via INSERT) into the final fact table.
+
+**Current-State Views:**
+*   **Views:** `v_dim_customer`, `v_dim_employee`, `v_dim_track`, `v_fct_invoice`, `v_fct_invoice_line`.
 
 ---
 
@@ -87,7 +92,7 @@ To ensure a reproducible and automated lifecycle for the demo, **Terraform** act
 Terraform is responsible for deploying all foundational Google Cloud resources and managing IAM configurations.
 *   **Networking:** VPC, subnets, firewall rules, and Serverless VPC Access Connectors or Direct Egress configurations.
 *   **Storage & Messaging:** Provisioning the Cloud SQL instance (`google_sql_database_instance`), Managed Kafka cluster (`google_managed_kafka_cluster`), and Kafka topics.
-*   **Analytics Base:** Creation of BigQuery datasets (Bronze, Silver, Gold) and the definition of the static destination tables (`google_bigquery_table`).
+*   **Analytics Base:** Creation of BigQuery datasets (Bronze, Silver, Gold), the definition of the static destination tables (`google_bigquery_table`), and a BigQuery Enterprise reservation managed by Terraform (with autoscale and a CONTINUOUS job type).
 *   **Compute:** Setting up Google Artifact Registry (`google_artifact_registry_repository`) and deploying the Kafka Connect custom container to Cloud Run (`google_cloud_run_v2_service`).
 *   **Security:** Assigning required IAM bindings for the Cloud Run Service Account (e.g., roles for Managed Kafka, Cloud SQL Client, and BigQuery Data Editor).
 

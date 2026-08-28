@@ -91,27 +91,28 @@ SILVER_CQ_FILES = [
     "silver_invoice_line.sql",
 ]
 
-GOLD_CQ_FILES = [
-    "gold_dim_customer.sql",
-    "gold_dim_track.sql",
-    "gold_dim_employee.sql",
-    "gold_fct_invoice.sql",
-    "gold_fct_invoice_line.sql",
+# Gold scheduled queries are managed by Terraform (not deploy.sh).
+# deploy.sh only creates the gold current-state views.
+GOLD_VIEW_FILES = [
+    "gold_v_dim_customer.sql",
+    "gold_v_dim_employee.sql",
+    "gold_v_dim_track.sql",
+    "gold_v_fct_invoice.sql",
+    "gold_v_fct_invoice_line.sql",
 ]
 
 
-@pytest.mark.parametrize("cq_file", SILVER_CQ_FILES + GOLD_CQ_FILES)
-def test_deploy_script_references_cq_file(deploy_sh, cq_file):
+@pytest.mark.parametrize("cq_file", SILVER_CQ_FILES)
+def test_deploy_script_references_silver_cq_file(deploy_sh, cq_file):
     assert cq_file in deploy_sh, (
-        f"deploy.sh should reference CQ file: {cq_file}"
+        f"deploy.sh should reference Silver CQ file: {cq_file}"
     )
 
 
-def test_deploy_script_starts_silver_before_gold(deploy_sh):
-    silver_pos = deploy_sh.find("silver_customer.sql")
-    gold_pos = deploy_sh.find("gold_dim_customer.sql")
-    assert silver_pos < gold_pos, (
-        "deploy.sh should start Silver CQs before Gold CQs"
+@pytest.mark.parametrize("view_file", GOLD_VIEW_FILES)
+def test_deploy_script_references_gold_view_file(deploy_sh, view_file):
+    assert view_file in deploy_sh, (
+        f"deploy.sh should reference Gold view file: {view_file}"
     )
 
 
@@ -126,3 +127,4 @@ def test_deploy_script_has_summary_output(deploy_sh):
     assert "Deployment completed" in deploy_sh, (
         "deploy.sh should print a completion summary"
     )
+

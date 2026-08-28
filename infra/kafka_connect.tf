@@ -5,7 +5,7 @@
 #
 # 1. Source — Cloud SQL for PostgreSQL (Debezium-based CDC)
 #    - Captures row-level changes via logical replication
-#    - Publishes to chinook.public.<table> topics
+#    - Publishes to cdc.public.<table> topics
 #
 # 2. Sink — BigQuery
 #    - Writes CDC events to Bronze dataset tables
@@ -137,7 +137,7 @@ resource "google_managed_kafka_connector" "cdc_source" {
     "driver.sslmode"          = "disable"
 
     # CDC configuration
-    "topic.prefix"                   = "chinook"
+    "topic.prefix"                   = "cdc"
     "table.include.list"             = "public.*"
     "plugin.name"                    = "pgoutput"
     "slot.name"                      = "debezium_slot"
@@ -147,11 +147,13 @@ resource "google_managed_kafka_connector" "cdc_source" {
     "decimal.handling.mode"          = "double"
     "time.precision.mode"            = "connect"
 
-    # Serialization — schemaless JSON
+    # Serialization — match Console UI defaults
+    # value.converter.schemas.enable=true embeds Debezium schema in each record,
+    # which the BQ sink requires for proper table creation and type inference
     "key.converter"                  = "org.apache.kafka.connect.json.JsonConverter"
     "key.converter.schemas.enable"   = "false"
     "value.converter"                = "org.apache.kafka.connect.json.JsonConverter"
-    "value.converter.schemas.enable" = "false"
+    "value.converter.schemas.enable" = "true"
   }
 
   # Workaround: GCP auto-sets task_restart_policy; provider bug causes
@@ -184,23 +186,30 @@ resource "google_managed_kafka_connector" "bigquery_sink" {
     # Connector identity
     "name"            = "bigquery-sink"
     "connector.class" = "com.wepay.kafka.connect.bigquery.BigQuerySinkConnector"
-    "tasks.max"       = "1"
+    "tasks.max"       = "3"
 
     # BigQuery destination
-    "topics.regex"       = "chinook\\.public\\..*"
-    "project"            = var.project_id
-    "defaultDataset"     = "bronze"
-    "autoCreateTables"   = "true"
-    "autoUpdateSchemas"  = "true"
+    "topics.regex"                = "cdc\\.public\\..*"
+    "project"                     = var.project_id
+    "defaultDataset"              = "bronze"
+    "autoCreateTables"            = "true"
+    "autoUpdateSchemas"           = "true"
+    "sanitizeTopics"              = "true"
+    "bigQueryPartitionDecorator"  = "false"
 
-    # Serialization — schemaless JSON
-    "key.converter"                  = "org.apache.kafka.connect.json.JsonConverter"
-    "key.converter.schemas.enable"   = "false"
+    # Serialization — schemas.enable=true to match CDC source output
+    # The source embeds Debezium schema in each record; the sink needs it
+    # for proper BigQuery table creation and type inference
+    "key.converter"                  = "org.apache.kafka.connect.storage.StringConverter"
     "value.converter"                = "org.apache.kafka.connect.json.JsonConverter"
-    "value.converter.schemas.enable" = "false"
+    "value.converter.schemas.enable" = "true"
 
-    # SMTs: drop PII fields, filter tombstones
-    "transforms"                                = "dropSensitiveFields,filterTombstones"
+    # SMTs: rename topics to match table names, drop PII, filter tombstones
+    # cdc.public.album → album_raw (auto-created by connector)
+    "transforms"                                = "renameTopics,dropSensitiveFields,filterTombstones"
+    "transforms.renameTopics.type"              = "org.apache.kafka.connect.transforms.RegexRouter"
+    "transforms.renameTopics.regex"             = "cdc\\.public\\.(.*)"
+    "transforms.renameTopics.replacement"       = "$1_raw"
     "transforms.dropSensitiveFields.type"       = "org.apache.kafka.connect.transforms.ReplaceField$Value"
     "transforms.dropSensitiveFields.exclude"    = "phone,fax"
     "transforms.filterTombstones.type"          = "org.apache.kafka.connect.transforms.Filter"
@@ -238,21 +247,20 @@ resource "google_managed_kafka_connector" "gcs_sink" {
     # Connector identity
     "name"            = "gcs-sink"
     "connector.class" = "io.aiven.kafka.connect.gcs.GcsSinkConnector"
-    "tasks.max"       = "1"
+    "tasks.max"       = "3"
 
     # GCS destination
-    "topics.regex"            = "chinook\\.public\\..*"
+    "topics.regex"            = "cdc\\.public\\..*"
     "gcs.bucket.name"         = google_storage_bucket.cdc_archive.name
     "gcs.credentials.default" = "true"
 
     # Output format
-    "format.output.type"    = "jsonl"
-    "file.compression.type" = "gzip"
+    "format.output.type" = "jsonl"
 
-    # Serialization — schemaless JSON
+    # Serialization — schemas.enable=true to match CDC source output
     "key.converter"                  = "org.apache.kafka.connect.storage.StringConverter"
     "value.converter"                = "org.apache.kafka.connect.json.JsonConverter"
-    "value.converter.schemas.enable" = "false"
+    "value.converter.schemas.enable" = "true"
   }
 
   timeouts {

@@ -5,7 +5,7 @@
 # - Minimum 3 vCPU / 3 GiB for demo (smallest available)
 # - VPC connectivity via the CDC pipeline subnet
 # - IAM authentication (SASL/OAUTHBEARER, no static credentials)
-# - 11 topics matching Debezium CDC naming: chinook.public.<table>
+# - 11 topics matching Debezium CDC naming: cdc.public.<table>
 #
 # Note: Cluster provisioning takes 15–30 minutes.
 # =============================================================================
@@ -51,8 +51,8 @@ resource "google_managed_kafka_cluster" "cluster" {
 # Kafka Topics — one per Chinook table
 # -----------------------------------------------------------------------------
 # Debezium naming convention: <topic.prefix>.<schema>.<table>
-# With topic.prefix=chinook and schema=public, topics are:
-#   chinook.public.customer, chinook.public.invoice, etc.
+# With topic.prefix=cdc and schema=public, topics are:
+#   cdc.public.customer, cdc.public.invoice, etc.
 # -----------------------------------------------------------------------------
 
 locals {
@@ -73,7 +73,7 @@ locals {
   # Build topic map: table_name => full topic ID
   chinook_topics = {
     for table in local.chinook_tables :
-    table => "chinook.public.${table}"
+    table => "cdc.public.${table}"
   }
 }
 
