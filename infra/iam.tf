@@ -80,6 +80,13 @@ resource "google_sql_user" "managed_kafka_iam" {
   instance = google_sql_database_instance.postgres.name
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
   project  = var.project_id
+
+  # The CDC connector grants this user object ownership in chinook.
+  # Database must be destroyed first (dropping owned objects) before
+  # this user can be deleted.
+  depends_on = [
+    google_sql_database.chinook,
+  ]
 }
 
 # -----------------------------------------------------------------------------

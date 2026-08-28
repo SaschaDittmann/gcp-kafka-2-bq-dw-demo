@@ -95,6 +95,12 @@ resource "google_sql_database" "chinook" {
   instance  = google_sql_database_instance.postgres.name
   charset   = "UTF8"
   collation = "en_US.UTF8"
+
+  # Connectors must be destroyed first — the CDC source holds a replication
+  # slot on this database which blocks DROP DATABASE.
+  depends_on = [
+    google_managed_kafka_connector.cdc_source,
+  ]
 }
 
 # -----------------------------------------------------------------------------
