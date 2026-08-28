@@ -64,7 +64,7 @@ resource "google_bigquery_reservation" "default" {
   edition       = "ENTERPRISE"
 
   autoscale {
-    max_slots = 100
+    max_slots = 50
   }
 }
 

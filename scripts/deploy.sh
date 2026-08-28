@@ -8,8 +8,7 @@
 #   3. Update Cloud Run services with the new image (Cloud Run mode only)
 #   4. Wait for Cloud Run services to become healthy (Cloud Run mode only)
 #   5. Register Kafka Connect connectors (Cloud Run mode only)
-#   6. Create Silver layer views (after Bronze tables are auto-created)
-#   7. Start BigQuery Continuous Queries
+#   6. Start BigQuery Continuous Queries
 #
 # Prerequisites:
 #   - `terraform apply` has been run successfully in infra/
@@ -298,117 +297,9 @@ step_register_connectors() {
   fi
 }
 
-# =============================================================================
-# Step 6: Create Silver Views (after Bronze tables exist)
-# =============================================================================
-
-step_create_silver_views() {
-  log_step "Creating Silver layer views"
-
-  local transform_dir="${PROJECT_ROOT}/transform"
-
-  # Wait for Bronze tables to be auto-created by the BQ sink connector.
-  # On a fresh deploy, the CDC source snapshot + BQ sink can take several minutes.
-  log_info "Waiting for Bronze tables to be auto-created by the BQ sink connector..."
-  local max_wait=300  # seconds (5 min for initial snapshot)
-  local elapsed=0
-  local interval=10
-
-  while [[ ${elapsed} -lt ${max_wait} ]]; do
-    local table_count
-    table_count=$(bq ls --project_id="${PROJECT_ID}" "bronze" 2>/dev/null | grep -c "_raw" || echo "0")
-    if [[ ${table_count} -ge 11 ]]; then
-      log_success "All 11 Bronze tables detected"
-      break
-    fi
-    log_info "Found ${table_count}/11 Bronze tables — waiting ${interval}s..."
-    sleep "${interval}"
-    elapsed=$((elapsed + interval))
-  done
-
-  if [[ ${elapsed} -ge ${max_wait} ]]; then
-    log_warn "Timed out waiting for Bronze tables — views will be created anyway"
-  fi
-
-  # Deploy view SQL scripts
-  local view_files=(
-    "silver_artist.sql"
-    "silver_album.sql"
-    "silver_genre.sql"
-    "silver_media_type.sql"
-    "silver_playlist.sql"
-    "silver_playlist_track.sql"
-  )
-
-  local view_errors=0
-  for view_file in "${view_files[@]}"; do
-    local view_path="${transform_dir}/${view_file}"
-    if [[ ! -f "${view_path}" ]]; then
-      log_warn "View file not found: ${view_path}"
-      view_errors=$((view_errors + 1))
-      continue
-    fi
-
-    log_info "Creating view: ${view_file}"
-    local view_sql
-    view_sql=$(sed "s/\${PROJECT_ID}/${PROJECT_ID}/g" "${view_path}")
-
-    if bq query --use_legacy_sql=false --project_id="${PROJECT_ID}" "${view_sql}"; then
-      log_success "Created view: ${view_file}"
-    else
-      log_warn "Failed to create view: ${view_file}"
-      view_errors=$((view_errors + 1))
-    fi
-  done
-
-  if [[ ${view_errors} -gt 0 ]]; then
-    log_warn "${view_errors} view(s) failed — they can be created manually after data flows"
-    return 0  # Non-fatal
-  fi
-
-  log_success "All Silver views created"
-
-  # --- Gold current-state views ---
-  # These can only be created after the gold Iceberg tables exist (from terraform apply).
-  log_info "Creating Gold current-state views..."
-  local gold_view_files=(
-    "gold_v_dim_customer.sql"
-    "gold_v_dim_employee.sql"
-    "gold_v_dim_track.sql"
-    "gold_v_fct_invoice.sql"
-    "gold_v_fct_invoice_line.sql"
-  )
-
-  local gold_errors=0
-  for view_file in "${gold_view_files[@]}"; do
-    local view_path="${transform_dir}/${view_file}"
-    if [[ ! -f "${view_path}" ]]; then
-      log_warn "View file not found: ${view_path}"
-      gold_errors=$((gold_errors + 1))
-      continue
-    fi
-
-    log_info "Creating view: ${view_file}"
-    local view_sql
-    view_sql=$(sed "s/\${PROJECT_ID}/${PROJECT_ID}/g" "${view_path}")
-
-    if bq query --use_legacy_sql=false --project_id="${PROJECT_ID}" "${view_sql}"; then
-      log_success "Created view: ${view_file}"
-    else
-      log_warn "Failed to create view: ${view_file}"
-      gold_errors=$((gold_errors + 1))
-    fi
-  done
-
-  if [[ ${gold_errors} -gt 0 ]]; then
-    log_warn "${gold_errors} gold view(s) failed — ensure terraform apply has been run first"
-  else
-    log_success "All Gold views created"
-  fi
-}
 
 # =============================================================================
-# Step 7: Start BigQuery Continuous Queries
+# Step 6: Start BigQuery Continuous Queries
 # =============================================================================
 
 step_start_continuous_queries() {
@@ -424,16 +315,16 @@ step_start_continuous_queries() {
 
   # Start Silver CQs first (Bronze → Silver), then Gold (Silver → Gold)
   local silver_cqs=(
-    "silver_customer.sql"
-    "silver_employee.sql"
-    "silver_track.sql"
-    "silver_invoice.sql"
-    "silver_invoice_line.sql"
+    "customer.sql"
+    "employee.sql"
+    "track.sql"
+    "invoice.sql"
+    "invoice_line.sql"
   )
 
   log_info "Starting Silver layer CQs (Bronze → Silver)..."
   for cq_file in "${silver_cqs[@]}"; do
-    local cq_path="${transform_dir}/${cq_file}"
+    local cq_path="${transform_dir}/silver/cq/${cq_file}"
     if [[ ! -f "${cq_path}" ]]; then
       log_error "CQ file not found: ${cq_path}"
       cq_errors=$((cq_errors + 1))
@@ -483,7 +374,6 @@ main() {
   step_update_cloudrun    || { log_error "Cloud Run update failed — cannot continue"; exit 1; }
   step_wait_for_cloudrun  || { log_error "Cloud Run health check failed — cannot continue"; exit 1; }
   step_register_connectors || true
-  step_create_silver_views || true
   step_start_continuous_queries || true
 
   # Summary

@@ -1,17 +1,16 @@
 -- =============================================================================
--- Silver View: playlist — Current-state playlist records
+-- Silver View: media_type — Current-state media type records
 -- =============================================================================
--- Deploy: bq query --use_legacy_sql=false < transform/silver_playlist.sql
+-- Used by: infra/bigquery_views.tf (Terraform manages the view lifecycle)
 -- =============================================================================
 
-CREATE OR REPLACE VIEW `${PROJECT_ID}.silver.playlist` AS
 SELECT
-  after.playlist_id                                    AS playlist_id,
+  after.media_type_id                                  AS media_type_id,
   after.name                                           AS name,
   IF(op = 'd', TRUE, FALSE)                           AS is_deleted,
   ts_ms                                                AS _source_ts_ms
-FROM `${PROJECT_ID}.bronze.playlist_raw`
+FROM `${PROJECT_ID}.bronze.media_type_raw`
 QUALIFY ROW_NUMBER() OVER (
-  PARTITION BY after.playlist_id
+  PARTITION BY after.media_type_id
   ORDER BY ts_ms DESC
 ) = 1;

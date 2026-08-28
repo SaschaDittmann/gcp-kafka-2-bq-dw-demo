@@ -5,7 +5,6 @@
 -- Includes denormalized album, artist, genre, and media type names.
 -- =============================================================================
 
-CREATE OR REPLACE VIEW `${PROJECT_ID}.gold.v_dim_track` AS
 SELECT
   surrogate_key,
   natural_key   AS track_id,
@@ -27,4 +26,3 @@ QUALIFY ROW_NUMBER() OVER (
   PARTITION BY natural_key
   ORDER BY valid_from DESC
 ) = 1;
-

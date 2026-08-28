@@ -1,17 +1,17 @@
 -- =============================================================================
--- Silver View: genre — Current-state genre records
+-- Silver View: album — Current-state album records
 -- =============================================================================
--- Deploy: bq query --use_legacy_sql=false < transform/silver_genre.sql
+-- Used by: infra/bigquery_views.tf (Terraform manages the view lifecycle)
 -- =============================================================================
 
-CREATE OR REPLACE VIEW `${PROJECT_ID}.silver.genre` AS
 SELECT
-  after.genre_id                                       AS genre_id,
-  after.name                                           AS name,
+  after.album_id                                       AS album_id,
+  after.title                                          AS title,
+  after.artist_id                                      AS artist_id,
   IF(op = 'd', TRUE, FALSE)                           AS is_deleted,
   ts_ms                                                AS _source_ts_ms
-FROM `${PROJECT_ID}.bronze.genre_raw`
+FROM `${PROJECT_ID}.bronze.album_raw`
 QUALIFY ROW_NUMBER() OVER (
-  PARTITION BY after.genre_id
+  PARTITION BY after.album_id
   ORDER BY ts_ms DESC
 ) = 1;

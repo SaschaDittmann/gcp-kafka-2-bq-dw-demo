@@ -1,17 +1,16 @@
 -- =============================================================================
--- Silver View: playlist_track — Current-state playlist-track associations
+-- Silver View: playlist — Current-state playlist records
 -- =============================================================================
--- Deploy: bq query --use_legacy_sql=false < transform/silver_playlist_track.sql
+-- Used by: infra/bigquery_views.tf (Terraform manages the view lifecycle)
 -- =============================================================================
 
-CREATE OR REPLACE VIEW `${PROJECT_ID}.silver.playlist_track` AS
 SELECT
   after.playlist_id                                    AS playlist_id,
-  after.track_id                                       AS track_id,
+  after.name                                           AS name,
   IF(op = 'd', TRUE, FALSE)                           AS is_deleted,
   ts_ms                                                AS _source_ts_ms
-FROM `${PROJECT_ID}.bronze.playlist_track_raw`
+FROM `${PROJECT_ID}.bronze.playlist_raw`
 QUALIFY ROW_NUMBER() OVER (
-  PARTITION BY after.playlist_id, after.track_id
+  PARTITION BY after.playlist_id
   ORDER BY ts_ms DESC
 ) = 1;

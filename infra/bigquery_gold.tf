@@ -226,7 +226,7 @@ resource "google_bigquery_table" "gold_fct_invoice_line" {
 # -----------------------------------------------------------------------------
 
 locals {
-  gold_sql_dir = "${path.module}/../transform"
+  gold_sq_dir = "${path.module}/../transform/gold/sq"
 }
 
 resource "google_bigquery_data_transfer_config" "gold_dim_customer" {
@@ -237,7 +237,7 @@ resource "google_bigquery_data_transfer_config" "gold_dim_customer" {
   service_account_name = google_service_account.kafka_connect.email
 
   params = {
-    query = replace(file("${local.gold_sql_dir}/gold_dim_customer.sql"), "$${PROJECT_ID}", var.project_id)
+    query = replace(file("${local.gold_sq_dir}/dim_customer.sql"), "$${PROJECT_ID}", var.project_id)
   }
 
   depends_on = [google_bigquery_table.gold_dim_customer]
@@ -251,7 +251,7 @@ resource "google_bigquery_data_transfer_config" "gold_dim_employee" {
   service_account_name = google_service_account.kafka_connect.email
 
   params = {
-    query = replace(file("${local.gold_sql_dir}/gold_dim_employee.sql"), "$${PROJECT_ID}", var.project_id)
+    query = replace(file("${local.gold_sq_dir}/dim_employee.sql"), "$${PROJECT_ID}", var.project_id)
   }
 
   depends_on = [google_bigquery_table.gold_dim_employee]
@@ -265,7 +265,7 @@ resource "google_bigquery_data_transfer_config" "gold_dim_track" {
   service_account_name = google_service_account.kafka_connect.email
 
   params = {
-    query = replace(file("${local.gold_sql_dir}/gold_dim_track.sql"), "$${PROJECT_ID}", var.project_id)
+    query = replace(file("${local.gold_sq_dir}/dim_track.sql"), "$${PROJECT_ID}", var.project_id)
   }
 
   depends_on = [google_bigquery_table.gold_dim_track]
@@ -279,7 +279,7 @@ resource "google_bigquery_data_transfer_config" "gold_fct_invoice" {
   service_account_name = google_service_account.kafka_connect.email
 
   params = {
-    query = replace(file("${local.gold_sql_dir}/gold_fct_invoice.sql"), "$${PROJECT_ID}", var.project_id)
+    query = replace(file("${local.gold_sq_dir}/fct_invoice.sql"), "$${PROJECT_ID}", var.project_id)
   }
 
   depends_on = [
@@ -296,7 +296,7 @@ resource "google_bigquery_data_transfer_config" "gold_fct_invoice_line" {
   service_account_name = google_service_account.kafka_connect.email
 
   params = {
-    query = replace(file("${local.gold_sql_dir}/gold_fct_invoice_line.sql"), "$${PROJECT_ID}", var.project_id)
+    query = replace(file("${local.gold_sq_dir}/fct_invoice_line.sql"), "$${PROJECT_ID}", var.project_id)
   }
 
   depends_on = [

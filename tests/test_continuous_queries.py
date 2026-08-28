@@ -23,7 +23,18 @@ TRANSFORM_DIR = os.path.join(PROJECT_ROOT, "transform")
 # =========================================================================
 
 def load_sql(filename):
-    filepath = os.path.join(TRANSFORM_DIR, filename)
+    """Load a SQL file from the transform/ directory tree.
+
+    Routes filenames to subfolders:
+      silver_*.sql → silver/cq/  (strip silver_ prefix)
+      gold_*.sql   → gold/sq/    (strip gold_ prefix)
+    """
+    if filename.startswith("silver_"):
+        filepath = os.path.join(TRANSFORM_DIR, "silver", "cq", filename[len("silver_"):])
+    elif filename.startswith("gold_"):
+        filepath = os.path.join(TRANSFORM_DIR, "gold", "sq", filename[len("gold_"):])
+    else:
+        filepath = os.path.join(TRANSFORM_DIR, filename)
     with open(filepath) as f:
         return f.read()
 
@@ -33,36 +44,45 @@ def load_sql(filename):
 # =========================================================================
 
 SILVER_CQ_FILES = [
-    "silver_customer.sql",
-    "silver_employee.sql",
-    "silver_track.sql",
-    "silver_invoice.sql",
-    "silver_invoice_line.sql",
+    "customer.sql",
+    "employee.sql",
+    "track.sql",
+    "invoice.sql",
+    "invoice_line.sql",
 ]
 
-# Reference/lookup tables use views on Bronze (no CQ scripts needed):
+# Reference/lookup tables use views on Bronze (managed by Terraform in bigquery_views.tf):
 # artist, album, genre, media_type, playlist, playlist_track
 
-SILVER_VIEW_FILES = [
-    "silver_artist.sql",
-    "silver_album.sql",
-    "silver_genre.sql",
-    "silver_media_type.sql",
-    "silver_playlist.sql",
-    "silver_playlist_track.sql",
+SILVER_VIEW_TABLE_IDS = [
+    "artist",
+    "album",
+    "genre",
+    "media_type",
+    "playlist",
+    "playlist_track",
 ]
 
 
 @pytest.mark.parametrize("filename", SILVER_CQ_FILES)
 def test_silver_cq_file_exists(filename):
-    filepath = os.path.join(TRANSFORM_DIR, filename)
-    assert os.path.isfile(filepath), f"Missing CQ script: {filename}"
+    filepath = os.path.join(TRANSFORM_DIR, "silver", "cq", filename)
+    assert os.path.isfile(filepath), f"Missing CQ script: silver/cq/{filename}"
 
 
-@pytest.mark.parametrize("filename", SILVER_VIEW_FILES)
-def test_silver_view_file_exists(filename):
-    filepath = os.path.join(TRANSFORM_DIR, filename)
-    assert os.path.isfile(filepath), f"Missing Silver view script: {filename}"
+INFRA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "infra")
+VIEWS_TF = os.path.join(INFRA_DIR, "bigquery_views.tf")
+
+
+@pytest.mark.parametrize("table_id", SILVER_VIEW_TABLE_IDS)
+def test_silver_view_in_terraform(table_id):
+    """Silver views are managed by Terraform in bigquery_views.tf."""
+    assert os.path.isfile(VIEWS_TF), "Missing bigquery_views.tf"
+    with open(VIEWS_TF) as f:
+        content = f.read()
+    assert f'table_id            = "{table_id}"' in content, (
+        f"Silver view '{table_id}' not found in bigquery_views.tf"
+    )
 
 
 # =========================================================================
@@ -70,32 +90,37 @@ def test_silver_view_file_exists(filename):
 # =========================================================================
 
 GOLD_SQ_FILES = [
-    "gold_dim_customer.sql",
-    "gold_dim_track.sql",
-    "gold_dim_employee.sql",
-    "gold_fct_invoice.sql",
-    "gold_fct_invoice_line.sql",
+    "dim_customer.sql",
+    "dim_track.sql",
+    "dim_employee.sql",
+    "fct_invoice.sql",
+    "fct_invoice_line.sql",
 ]
 
-GOLD_VIEW_FILES = [
-    "gold_v_dim_customer.sql",
-    "gold_v_dim_employee.sql",
-    "gold_v_dim_track.sql",
-    "gold_v_fct_invoice.sql",
-    "gold_v_fct_invoice_line.sql",
+GOLD_VIEW_TABLE_IDS = [
+    "v_dim_customer",
+    "v_dim_employee",
+    "v_dim_track",
+    "v_fct_invoice",
+    "v_fct_invoice_line",
 ]
 
 
 @pytest.mark.parametrize("filename", GOLD_SQ_FILES)
 def test_gold_sq_file_exists(filename):
-    filepath = os.path.join(TRANSFORM_DIR, filename)
-    assert os.path.isfile(filepath), f"Missing Gold scheduled query script: {filename}"
+    filepath = os.path.join(TRANSFORM_DIR, "gold", "sq", filename)
+    assert os.path.isfile(filepath), f"Missing Gold scheduled query: gold/sq/{filename}"
 
 
-@pytest.mark.parametrize("filename", GOLD_VIEW_FILES)
-def test_gold_view_file_exists(filename):
-    filepath = os.path.join(TRANSFORM_DIR, filename)
-    assert os.path.isfile(filepath), f"Missing Gold view script: {filename}"
+@pytest.mark.parametrize("table_id", GOLD_VIEW_TABLE_IDS)
+def test_gold_view_in_terraform(table_id):
+    """Gold views are managed by Terraform in bigquery_views.tf."""
+    assert os.path.isfile(VIEWS_TF), "Missing bigquery_views.tf"
+    with open(VIEWS_TF) as f:
+        content = f.read()
+    assert f'table_id            = "{table_id}"' in content, (
+        f"Gold view '{table_id}' not found in bigquery_views.tf"
+    )
 
 
 # =========================================================================
@@ -308,30 +333,37 @@ def test_fct_invoice_line_computes_line_total():
 
 
 # =========================================================================
-# Happy Path: Gold views use current-state patterns
+# Happy Path: Gold views use current-state patterns (checked via TF)
 # =========================================================================
 
-@pytest.mark.parametrize("filename", [
-    "gold_v_dim_customer.sql",
-    "gold_v_dim_employee.sql",
-    "gold_v_dim_track.sql",
+def _read_views_tf():
+    """Read the bigquery_views.tf file content."""
+    with open(VIEWS_TF) as f:
+        return f.read()
+
+
+@pytest.mark.parametrize("view_name", [
+    "v_dim_customer",
+    "v_dim_employee",
+    "v_dim_track",
 ])
-def test_gold_dim_view_filters_active(filename):
-    sql = load_sql(filename)
-    assert "is_active = TRUE" in sql, (
-        f"{filename} must filter for active records"
+def test_gold_dim_view_filters_active(view_name):
+    content = _read_views_tf()
+    assert "is_active = TRUE" in content, (
+        "Gold dim views must filter for active records"
     )
-    assert "ROW_NUMBER()" in sql, (
-        f"{filename} must use ROW_NUMBER() for dedup"
+    assert "ROW_NUMBER()" in content, (
+        "Gold dim views must use ROW_NUMBER() for dedup"
     )
 
 
-@pytest.mark.parametrize("filename", [
-    "gold_v_fct_invoice.sql",
-    "gold_v_fct_invoice_line.sql",
+@pytest.mark.parametrize("view_name", [
+    "v_fct_invoice",
+    "v_fct_invoice_line",
 ])
-def test_gold_fact_view_joins_dims(filename):
-    sql = load_sql(filename)
-    assert "v_dim_customer" in sql, (
-        f"{filename} must join with v_dim_customer view"
+def test_gold_fact_view_joins_dims(view_name):
+    content = _read_views_tf()
+    assert "v_dim_customer" in content, (
+        "Gold fact views must join with v_dim_customer"
     )
+

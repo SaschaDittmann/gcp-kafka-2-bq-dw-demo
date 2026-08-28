@@ -22,7 +22,11 @@ The data will be streamed by using Change Data Capture (CDC) to a Google Managed
 infra/              # Terraform configurations for GCP
 connect/            # Kafka Connect Dockerfile and source connector config (Cloud Run mode)
 scripts/            # Deployment and teardown shell scripts
-transform/          # BigQuery transformation SQL — CQs, scheduled queries, and views
+transform/          # BigQuery transformation SQL
+  silver/cq/        #   Silver Continuous Queries (Bronze → Silver)
+  silver/views/     #   Silver views on Bronze (auto-discovered by Terraform)
+  gold/sq/          #   Gold scheduled queries (Silver → Gold)
+  gold/views/       #   Gold current-state views (auto-discovered by Terraform)
 data/               # SQL schema, seed data, and database initialization scripts
 tests/              # End-to-end and integration tests
 docs/prds/          # Product Requirements Documents

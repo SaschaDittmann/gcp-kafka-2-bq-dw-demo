@@ -4,10 +4,9 @@
 -- View on Bronze that extracts the latest state per artist using
 -- QUALIFY ROW_NUMBER(). No CQ needed since artists change rarely.
 --
--- Deploy: bq query --use_legacy_sql=false < transform/silver_artist.sql
+-- Used by: infra/bigquery_views.tf (Terraform manages the view lifecycle)
 -- =============================================================================
 
-CREATE OR REPLACE VIEW `${PROJECT_ID}.silver.artist` AS
 SELECT
   after.artist_id                                      AS artist_id,
   after.name                                           AS name,

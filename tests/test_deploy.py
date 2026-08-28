@@ -84,35 +84,20 @@ def test_deploy_script_calls_register_connectors(deploy_sh):
 
 
 SILVER_CQ_FILES = [
-    "silver_customer.sql",
-    "silver_employee.sql",
-    "silver_track.sql",
-    "silver_invoice.sql",
-    "silver_invoice_line.sql",
+    "customer.sql",
+    "employee.sql",
+    "track.sql",
+    "invoice.sql",
+    "invoice_line.sql",
 ]
 
-# Gold scheduled queries are managed by Terraform (not deploy.sh).
-# deploy.sh only creates the gold current-state views.
-GOLD_VIEW_FILES = [
-    "gold_v_dim_customer.sql",
-    "gold_v_dim_employee.sql",
-    "gold_v_dim_track.sql",
-    "gold_v_fct_invoice.sql",
-    "gold_v_fct_invoice_line.sql",
-]
+# Gold views and scheduled queries are managed by Terraform, not deploy.sh.
 
 
 @pytest.mark.parametrize("cq_file", SILVER_CQ_FILES)
 def test_deploy_script_references_silver_cq_file(deploy_sh, cq_file):
     assert cq_file in deploy_sh, (
         f"deploy.sh should reference Silver CQ file: {cq_file}"
-    )
-
-
-@pytest.mark.parametrize("view_file", GOLD_VIEW_FILES)
-def test_deploy_script_references_gold_view_file(deploy_sh, view_file):
-    assert view_file in deploy_sh, (
-        f"deploy.sh should reference Gold view file: {view_file}"
     )
 
 

@@ -3,10 +3,9 @@
 -- =============================================================================
 -- Shows only the latest active version of each customer (SCD Type 2).
 --
--- Deploy: bq query --use_legacy_sql=false < transform/gold_v_dim_customer.sql
+-- Used by: infra/bigquery_views.tf (Terraform manages the view lifecycle)
 -- =============================================================================
 
-CREATE OR REPLACE VIEW `${PROJECT_ID}.gold.v_dim_customer` AS
 SELECT
   surrogate_key,
   natural_key   AS customer_id,
@@ -29,4 +28,3 @@ QUALIFY ROW_NUMBER() OVER (
   PARTITION BY natural_key
   ORDER BY valid_from DESC
 ) = 1;
-

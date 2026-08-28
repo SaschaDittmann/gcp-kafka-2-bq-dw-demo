@@ -4,7 +4,6 @@
 -- Shows only the latest active version of each employee (SCD Type 2).
 -- =============================================================================
 
-CREATE OR REPLACE VIEW `${PROJECT_ID}.gold.v_dim_employee` AS
 SELECT
   surrogate_key,
   natural_key   AS employee_id,
@@ -29,4 +28,3 @@ QUALIFY ROW_NUMBER() OVER (
   PARTITION BY natural_key
   ORDER BY valid_from DESC
 ) = 1;
-

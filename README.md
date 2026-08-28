@@ -78,7 +78,11 @@ The pipeline uses the [Chinook sample database](https://github.com/lerocha/chino
 infra/              # Terraform configurations for GCP
 connect/            # Kafka Connect Dockerfile and source connector config (for Cloud Run mode)
 scripts/            # Deployment and teardown shell scripts
-transform/          # BigQuery transformation SQL — CQs, scheduled queries, and views
+transform/          # BigQuery transformation SQL
+  silver/cq/        #   Silver Continuous Queries (Bronze → Silver)
+  silver/views/     #   Silver views on Bronze (auto-discovered by Terraform)
+  gold/sq/          #   Gold scheduled queries (Silver → Gold)
+  gold/views/       #   Gold current-state views (auto-discovered by Terraform)
 data/               # SQL schema, seed data, and database initialization scripts
 tests/              # End-to-end and integration tests
 docs/prds/          # Product Requirements Documents
@@ -301,10 +305,9 @@ This orchestrates the full post-Terraform deployment:
 | 2 | Build & push Docker image (only if using Cloud Run source) | ~5 min |
 | 3 | Update Cloud Run services (only if using Cloud Run source) | ~1 min |
 | 4 | Wait for Cloud Run services (only if using Cloud Run source) | ~2 min |
-| 5 | Wait for Bronze tables, then create Silver + Gold views | ~5 min |
-| 6 | Start 5 Silver Continuous Queries (Bronze → Silver) | ~1 min |
+| 5 | Start 5 Silver Continuous Queries (Bronze → Silver) | ~1 min |
 
-Note: Gold scheduled queries are managed by Terraform (auto-deployed on `terraform apply`).
+Note: Bronze tables, Silver/Gold views, and Gold scheduled queries are all managed by Terraform (auto-deployed on `terraform apply`).
 
 **Skip flags** (useful for re-runs):
 ```bash
@@ -431,15 +434,6 @@ If it times out, just re-run `terraform apply` — it will pick up where it left
 Continuous Queries require BigQuery Enterprise edition with slot reservations.
 The Terraform configuration creates an autoscale reservation (up to 100 slots) with CONTINUOUS job type assignment.
 If you see this error, ensure `terraform apply` has been run to create the reservation.
-
-### BigQuery: Views missing after `terraform apply`
-
-Silver and Gold views are **not managed by Terraform** because they reference Bronze tables that are auto-created by the BigQuery Sink Connector (Terraform can't create views on tables that don't yet exist).
-
-If `terraform apply` destroys the views, recreate them:
-```bash
-./scripts/create_views.sh
-```
 
 ### Cloud Build: Permission denied
 
