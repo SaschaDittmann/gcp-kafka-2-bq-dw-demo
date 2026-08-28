@@ -31,12 +31,12 @@ resource "google_service_account" "kafka_connect" {
 
 locals {
   kafka_connect_roles = [
-    "roles/managedkafka.client",       # Publish/subscribe to Managed Kafka topics
-    "roles/cloudsql.client",           # Connect to Cloud SQL PostgreSQL instance
-    "roles/bigquery.dataEditor",       # Write records to BigQuery Bronze tables
-    "roles/bigquery.jobUser",          # Run BigQuery load and query jobs
-    "roles/storage.objectCreator",     # Write CDC archive files to GCS
-    "roles/artifactregistry.reader",   # Pull container images from Artifact Registry (Cloud Run)
+    "roles/managedkafka.client",     # Publish/subscribe to Managed Kafka topics
+    "roles/cloudsql.client",         # Connect to Cloud SQL PostgreSQL instance
+    "roles/bigquery.dataEditor",     # Write records to BigQuery Bronze tables
+    "roles/bigquery.jobUser",        # Run BigQuery load and query jobs
+    "roles/storage.objectCreator",   # Write CDC archive files to GCS
+    "roles/artifactregistry.reader", # Pull container images from Artifact Registry (Cloud Run)
   ]
 }
 

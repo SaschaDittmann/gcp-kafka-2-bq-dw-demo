@@ -19,27 +19,27 @@ locals {
   kafka_bootstrap_servers = "bootstrap.${google_managed_kafka_cluster.cluster.cluster_id}.${var.region}.managedkafka.${var.project_id}.cloud.goog:9092"
 
   connect_source_env = {
-    CONNECT_REST_PORT                        = "8080"
-    CONNECT_REST_ADVERTISED_HOST_NAME        = "localhost"
-    CONNECT_BOOTSTRAP_SERVERS                = local.kafka_bootstrap_servers
-    CONNECT_GROUP_ID                         = "cdc-source-group"
-    CONNECT_CONFIG_STORAGE_TOPIC             = "source-connect-configs"
-    CONNECT_OFFSET_STORAGE_TOPIC             = "source-connect-offsets"
-    CONNECT_STATUS_STORAGE_TOPIC             = "source-connect-status"
+    CONNECT_REST_PORT                         = "8080"
+    CONNECT_REST_ADVERTISED_HOST_NAME         = "localhost"
+    CONNECT_BOOTSTRAP_SERVERS                 = local.kafka_bootstrap_servers
+    CONNECT_GROUP_ID                          = "cdc-source-group"
+    CONNECT_CONFIG_STORAGE_TOPIC              = "source-connect-configs"
+    CONNECT_OFFSET_STORAGE_TOPIC              = "source-connect-offsets"
+    CONNECT_STATUS_STORAGE_TOPIC              = "source-connect-status"
     CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR = "3"
     CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR = "3"
     CONNECT_STATUS_STORAGE_REPLICATION_FACTOR = "3"
-    CONNECT_KEY_CONVERTER                    = "org.apache.kafka.connect.json.JsonConverter"
-    CONNECT_VALUE_CONVERTER                  = "org.apache.kafka.connect.json.JsonConverter"
-    CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE     = "false"
-    CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE   = "false"
-    CONNECT_PLUGIN_PATH                      = "/usr/share/confluent-hub-components,/etc/kafka-connect/jars"
+    CONNECT_KEY_CONVERTER                     = "org.apache.kafka.connect.json.JsonConverter"
+    CONNECT_VALUE_CONVERTER                   = "org.apache.kafka.connect.json.JsonConverter"
+    CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE      = "false"
+    CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE    = "false"
+    CONNECT_PLUGIN_PATH                       = "/usr/share/confluent-hub-components,/etc/kafka-connect/jars"
 
     # SASL/OAUTHBEARER auth — worker
-    CONNECT_SECURITY_PROTOCOL                          = "SASL_SSL"
-    CONNECT_SASL_MECHANISM                             = "OAUTHBEARER"
-    CONNECT_SASL_LOGIN_CALLBACK_HANDLER_CLASS          = "com.google.cloud.hosted.kafka.auth.GcpLoginCallbackHandler"
-    CONNECT_SASL_JAAS_CONFIG                           = "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;"
+    CONNECT_SECURITY_PROTOCOL                 = "SASL_SSL"
+    CONNECT_SASL_MECHANISM                    = "OAUTHBEARER"
+    CONNECT_SASL_LOGIN_CALLBACK_HANDLER_CLASS = "com.google.cloud.hosted.kafka.auth.GcpLoginCallbackHandler"
+    CONNECT_SASL_JAAS_CONFIG                  = "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;"
 
     # SASL/OAUTHBEARER auth — producer
     CONNECT_PRODUCER_SECURITY_PROTOCOL                 = "SASL_SSL"
@@ -77,7 +77,7 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
 
     scaling {
       min_instance_count = 1
-      max_instance_count = 1  # 1 replication slot = 1 instance
+      max_instance_count = 1 # 1 replication slot = 1 instance
     }
 
     vpc_access {
@@ -107,7 +107,7 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
         }
         initial_delay_seconds = 30
         period_seconds        = 10
-        failure_threshold     = 24  # 30 + (24 * 10) = 270s max
+        failure_threshold     = 24 # 30 + (24 * 10) = 270s max
         timeout_seconds       = 5
       }
 

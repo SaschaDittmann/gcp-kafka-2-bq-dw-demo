@@ -21,8 +21,8 @@ resource "google_managed_kafka_cluster" "cluster" {
   location   = var.region
 
   capacity_config {
-    vcpu_count   = 3           # Minimum supported vCPU count
-    memory_bytes = 3221225472  # 3 GiB (minimum: 1 GiB per vCPU)
+    vcpu_count   = 3          # Minimum supported vCPU count
+    memory_bytes = 3221225472 # 3 GiB (minimum: 1 GiB per vCPU)
   }
 
   gcp_config {
@@ -85,8 +85,8 @@ resource "google_managed_kafka_topic" "chinook" {
   cluster            = google_managed_kafka_cluster.cluster.cluster_id
   location           = var.region
   topic_id           = each.value
-  partition_count    = 1  # Single partition for demo (low throughput)
-  replication_factor = 3  # 3 replicas across availability zones
+  partition_count    = 1 # Single partition for demo (low throughput)
+  replication_factor = 3 # 3 replicas across availability zones
 
   configs = {
     "cleanup.policy" = "delete"

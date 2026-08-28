@@ -21,7 +21,7 @@ resource "google_bigquery_table" "silver_artist_view" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         after.artist_id AS artist_id,
         after.name      AS name,
@@ -47,7 +47,7 @@ resource "google_bigquery_table" "silver_album_view" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         after.album_id  AS album_id,
         after.title     AS title,
@@ -74,7 +74,7 @@ resource "google_bigquery_table" "silver_genre_view" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         after.genre_id AS genre_id,
         after.name     AS name,
@@ -100,7 +100,7 @@ resource "google_bigquery_table" "silver_media_type_view" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         after.media_type_id AS media_type_id,
         after.name          AS name,
@@ -126,7 +126,7 @@ resource "google_bigquery_table" "silver_playlist_view" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         after.playlist_id AS playlist_id,
         after.name        AS name,
@@ -152,7 +152,7 @@ resource "google_bigquery_table" "silver_playlist_track_view" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         after.playlist_id AS playlist_id,
         after.track_id    AS track_id,
@@ -185,7 +185,7 @@ resource "google_bigquery_table" "gold_v_dim_customer" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         surrogate_key,
         natural_key   AS customer_id,
@@ -223,7 +223,7 @@ resource "google_bigquery_table" "gold_v_dim_employee" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         surrogate_key,
         natural_key   AS employee_id,
@@ -263,7 +263,7 @@ resource "google_bigquery_table" "gold_v_dim_track" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         surrogate_key,
         natural_key   AS track_id,
@@ -300,7 +300,7 @@ resource "google_bigquery_table" "gold_v_fct_invoice" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         f.invoice_id,
         f.customer_key,
@@ -338,7 +338,7 @@ resource "google_bigquery_table" "gold_v_fct_invoice_line" {
   labels              = local.common_labels
 
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         f.invoice_line_id,
         f.invoice_id,

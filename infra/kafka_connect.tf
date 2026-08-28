@@ -81,8 +81,8 @@ resource "google_managed_kafka_connect_cluster" "connect" {
   kafka_cluster      = "projects/${var.project_id}/locations/${var.region}/clusters/${google_managed_kafka_cluster.cluster.cluster_id}"
 
   capacity_config {
-    vcpu_count   = 3           # Minimum supported
-    memory_bytes = 3221225472  # 3 GiB (1 GiB per vCPU)
+    vcpu_count   = 3          # Minimum supported
+    memory_bytes = 3221225472 # 3 GiB (1 GiB per vCPU)
   }
 
   gcp_config {
@@ -130,22 +130,22 @@ resource "google_managed_kafka_connector" "cdc_source" {
     # Cloud SQL connection — uses Managed Kafka SA with IAM auth
     # The managed service connects as service-PROJECT_NUMBER@gcp-sa-managedkafka.iam
     # No database.hostname needed — driver.cloudSqlInstance handles routing
-    "database.dbname"          = "chinook"
-    "driver.cloudSqlInstance"  = google_sql_database_instance.postgres.connection_name
+    "database.dbname"         = "chinook"
+    "driver.cloudSqlInstance" = google_sql_database_instance.postgres.connection_name
     "driver.enableIamAuth"    = "true"
     "driver.ipTypes"          = "PRIVATE,PUBLIC"
     "driver.sslmode"          = "disable"
 
     # CDC configuration
-    "topic.prefix"                   = "cdc"
-    "table.include.list"             = "public.*"
-    "plugin.name"                    = "pgoutput"
-    "slot.name"                      = "debezium_slot"
-    "publication.name"               = "debezium_publication"
-    "publication.autocreate.mode"    = "disabled"
-    "snapshot.mode"                  = "initial"
-    "decimal.handling.mode"          = "double"
-    "time.precision.mode"            = "connect"
+    "topic.prefix"                = "cdc"
+    "table.include.list"          = "public.*"
+    "plugin.name"                 = "pgoutput"
+    "slot.name"                   = "debezium_slot"
+    "publication.name"            = "debezium_publication"
+    "publication.autocreate.mode" = "disabled"
+    "snapshot.mode"               = "initial"
+    "decimal.handling.mode"       = "double"
+    "time.precision.mode"         = "connect"
 
     # Serialization — match Console UI defaults
     # value.converter.schemas.enable=true embeds Debezium schema in each record,
@@ -189,13 +189,13 @@ resource "google_managed_kafka_connector" "bigquery_sink" {
     "tasks.max"       = "3"
 
     # BigQuery destination
-    "topics.regex"                = "cdc\\.public\\..*"
-    "project"                     = var.project_id
-    "defaultDataset"              = "bronze"
-    "autoCreateTables"            = "true"
-    "autoUpdateSchemas"           = "true"
-    "sanitizeTopics"              = "true"
-    "bigQueryPartitionDecorator"  = "false"
+    "topics.regex"               = "cdc\\.public\\..*"
+    "project"                    = var.project_id
+    "defaultDataset"             = "bronze"
+    "autoCreateTables"           = "true"
+    "autoUpdateSchemas"          = "true"
+    "sanitizeTopics"             = "true"
+    "bigQueryPartitionDecorator" = "false"
 
     # Serialization — schemas.enable=true to match CDC source output
     # The source embeds Debezium schema in each record; the sink needs it
@@ -206,16 +206,16 @@ resource "google_managed_kafka_connector" "bigquery_sink" {
 
     # SMTs: rename topics to match table names, drop PII, filter tombstones
     # cdc.public.album → album_raw (auto-created by connector)
-    "transforms"                                = "renameTopics,dropSensitiveFields,filterTombstones"
-    "transforms.renameTopics.type"              = "org.apache.kafka.connect.transforms.RegexRouter"
-    "transforms.renameTopics.regex"             = "cdc\\.public\\.(.*)"
-    "transforms.renameTopics.replacement"       = "$1_raw"
-    "transforms.dropSensitiveFields.type"       = "org.apache.kafka.connect.transforms.ReplaceField$Value"
-    "transforms.dropSensitiveFields.exclude"    = "phone,fax"
-    "transforms.filterTombstones.type"          = "org.apache.kafka.connect.transforms.Filter"
-    "transforms.filterTombstones.predicate"     = "isTombstone"
-    "predicates"                                = "isTombstone"
-    "predicates.isTombstone.type"               = "org.apache.kafka.connect.transforms.predicates.RecordIsTombstone"
+    "transforms"                             = "renameTopics,dropSensitiveFields,filterTombstones"
+    "transforms.renameTopics.type"           = "org.apache.kafka.connect.transforms.RegexRouter"
+    "transforms.renameTopics.regex"          = "cdc\\.public\\.(.*)"
+    "transforms.renameTopics.replacement"    = "$1_raw"
+    "transforms.dropSensitiveFields.type"    = "org.apache.kafka.connect.transforms.ReplaceField$Value"
+    "transforms.dropSensitiveFields.exclude" = "phone,fax"
+    "transforms.filterTombstones.type"       = "org.apache.kafka.connect.transforms.Filter"
+    "transforms.filterTombstones.predicate"  = "isTombstone"
+    "predicates"                             = "isTombstone"
+    "predicates.isTombstone.type"            = "org.apache.kafka.connect.transforms.predicates.RecordIsTombstone"
   }
 
   timeouts {
