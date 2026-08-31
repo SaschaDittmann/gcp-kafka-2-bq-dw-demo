@@ -27,3 +27,4 @@ The connector will **use existing tables** if their schema matches what it would
 ### Use `fileset()` for views
 
 With Bronze tables pre-created in TF, views can also be TF-managed. Using `fileset()` + `for_each` to auto-discover SQL files from `transform/silver/views/` and `transform/gold/views/` means adding a new view is just dropping a `.sql` file — no TF config changes needed.
+

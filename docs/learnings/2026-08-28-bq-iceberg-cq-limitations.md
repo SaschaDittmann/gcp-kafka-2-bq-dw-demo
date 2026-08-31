@@ -30,3 +30,4 @@ The `APPENDS()` function with `NULL` as the second argument starts reading from 
 ### FLEX / FLEX_FLAT_RATE Capacity Types Are Sunset
 
 When creating BigQuery reservations, `FLEX_FLAT_RATE` and `FLEX` edition/capacity types return errors. Use `ENTERPRISE` edition with `autoscale { max_slots = N }` instead.
+

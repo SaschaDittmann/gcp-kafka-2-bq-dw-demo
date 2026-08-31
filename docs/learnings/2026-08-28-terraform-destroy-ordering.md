@@ -40,3 +40,4 @@ resource "google_sql_user" "managed_kafka_iam" {
 ```
 
 **Key insight**: `depends_on` affects **both** create and destroy ordering. During create, it ensures the dependency is built first. During destroy, it ensures the dependent is destroyed **before** the dependency. Think about what runtime state (replication slots, object ownership, connections) your resources create outside of Terraform's knowledge.
+
