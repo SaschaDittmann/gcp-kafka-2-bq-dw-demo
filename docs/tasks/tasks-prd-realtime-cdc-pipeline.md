@@ -10,9 +10,14 @@
 - `infra/iam.tf` - Service accounts and IAM role bindings
 - `infra/cloudsql.tf` - Cloud SQL instance, database, and users
 - `infra/kafka.tf` - Managed Kafka cluster and topic definitions
-- `infra/bigquery.tf` - BigQuery datasets and all table schemas (bronze, silver, gold)
+- `infra/kafka_connect.tf` - Managed Kafka Connect cluster and connectors
+- `infra/bigquery.tf` - BigQuery datasets and reservation
+- `infra/bigquery_bronze.tf` - Bronze CDC tables (11 tables via `for_each`)
+- `infra/bigquery_silver.tf` - Silver CQ-populated tables (5 tables)
+- `infra/bigquery_gold.tf` - Gold Iceberg infra, dim/fact tables, and scheduled queries
+- `infra/bigquery_views.tf` - Silver + Gold views via `fileset()` + `for_each`
 - `infra/artifact_registry.tf` - Artifact Registry repository
-- `infra/cloudrun.tf` - Cloud Run service for Kafka Connect
+- `infra/cloudrun.tf` - Cloud Run service for Kafka Connect (optional CDC source mode)
 - `data/chinook_schema.sql` - Chinook database DDL (tables, constraints)
 - `data/chinook_seed.sql` - Chinook sample data INSERT statements
 - `data/init_db.sh` - Database initialization script (schema, seed, replication slot)
@@ -20,22 +25,27 @@
 - `connect/debezium-source.json` - Debezium PostgreSQL Source Connector configuration
 - `connect/bigquery-sink.json` - BigQuery Sink Connector configuration (including SMTs)
 - `connect/register-connectors.sh` - Script to register connectors via REST API
-- `transform/silver_customer.sql` - CQ: Bronze → Silver for customer
-- `transform/silver_employee.sql` - CQ: Bronze → Silver for employee
-- `transform/silver_artist.sql` - CQ: Bronze → Silver for artist
-- `transform/silver_album.sql` - CQ: Bronze → Silver for album
-- `transform/silver_track.sql` - CQ: Bronze → Silver for track
-- `transform/silver_genre.sql` - CQ: Bronze → Silver for genre
-- `transform/silver_media_type.sql` - CQ: Bronze → Silver for media_type
-- `transform/silver_invoice.sql` - CQ: Bronze → Silver for invoice
-- `transform/silver_invoice_line.sql` - CQ: Bronze → Silver for invoice_line
-- `transform/silver_playlist.sql` - CQ: Bronze → Silver for playlist
-- `transform/silver_playlist_track.sql` - CQ: Bronze → Silver for playlist_track
-- `transform/gold_dim_customer.sql` - CQ: Silver → Gold SCD2 dim_customer
-- `transform/gold_dim_track.sql` - CQ: Silver → Gold SCD2 dim_track (denormalized with album, artist, genre, media_type)
-- `transform/gold_dim_employee.sql` - CQ: Silver → Gold SCD2 dim_employee
-- `transform/gold_fct_invoice.sql` - CQ: Silver → Gold fct_invoice (with dimension surrogate key lookups)
-- `transform/gold_fct_invoice_line.sql` - CQ: Silver → Gold fct_invoice_line (with dimension surrogate key lookups)
+- `transform/silver/cq/customer.sql` - CQ: Bronze → Silver for customer
+- `transform/silver/cq/employee.sql` - CQ: Bronze → Silver for employee
+- `transform/silver/cq/track.sql` - CQ: Bronze → Silver for track
+- `transform/silver/cq/invoice.sql` - CQ: Bronze → Silver for invoice
+- `transform/silver/cq/invoice_line.sql` - CQ: Bronze → Silver for invoice_line
+- `transform/silver/views/artist.sql` - View: current-state artist (on Bronze)
+- `transform/silver/views/album.sql` - View: current-state album (on Bronze)
+- `transform/silver/views/genre.sql` - View: current-state genre (on Bronze)
+- `transform/silver/views/media_type.sql` - View: current-state media_type (on Bronze)
+- `transform/silver/views/playlist.sql` - View: current-state playlist (on Bronze)
+- `transform/silver/views/playlist_track.sql` - View: current-state playlist_track (on Bronze)
+- `transform/gold/sq/dim_customer.sql` - SQ: Silver → Gold SCD2 dim_customer
+- `transform/gold/sq/dim_track.sql` - SQ: Silver → Gold SCD2 dim_track (denormalized)
+- `transform/gold/sq/dim_employee.sql` - SQ: Silver → Gold SCD2 dim_employee
+- `transform/gold/sq/fct_invoice.sql` - SQ: Silver → Gold fct_invoice
+- `transform/gold/sq/fct_invoice_line.sql` - SQ: Silver → Gold fct_invoice_line
+- `transform/gold/views/v_dim_customer.sql` - View: Gold current-state customer dimension
+- `transform/gold/views/v_dim_employee.sql` - View: Gold current-state employee dimension
+- `transform/gold/views/v_dim_track.sql` - View: Gold current-state track dimension
+- `transform/gold/views/v_fct_invoice.sql` - View: Gold current-state invoice facts
+- `transform/gold/views/v_fct_invoice_line.sql` - View: Gold current-state invoice line facts
 - `scripts/deploy.sh` - Full deployment orchestration script
 - `scripts/teardown.sh` - Full teardown and cleanup script
 - `tests/test_deploy.py` - End-to-end tests for deploy script
@@ -95,20 +105,20 @@
   - [x] 4.9 Document the Kafka Connect setup in `README.md` including the Dockerfile contents, connector configuration details, SMT behavior, and how to verify connector status via the REST API
 
 - [x] 5.0 BigQuery Data Warehouse — Bronze, Silver & Gold Layers (Complete Vertical Slice)
-  - [x] 5.1 Define BigQuery datasets in `infra/bigquery.tf`: create `google_bigquery_dataset` for `bronze`, `silver`, and `gold` datasets in `europe-west1`
-  - [x] 5.2 Define Bronze layer tables in `infra/bigquery.tf`: create `google_bigquery_table` for each of the 11 source tables (e.g., `customer_raw`, `invoice_raw`, `track_raw`) with schema columns matching the Debezium envelope structure (`before` as JSON/STRING, `after` as JSON/STRING, `op` as STRING, `ts_ms` as INTEGER, `source` as JSON/STRING)
-  - [x] 5.3 Define Silver layer tables in `infra/bigquery.tf`: create `google_bigquery_table` for all 11 entities (`customer`, `employee`, `artist`, `album`, `track`, `genre`, `media_type`, `invoice`, `invoice_line`, `playlist`, `playlist_track`) with entity-specific columns plus `is_deleted` BOOLEAN and `_loaded_at` TIMESTAMP
-  - [x] 5.4 Define Gold layer tables in `infra/bigquery.tf`: create dimension tables (`dim_customer`, `dim_track`, `dim_employee`) with columns `surrogate_key`, `natural_key`, `valid_from`, `valid_to`, `is_active`, plus entity attributes; `dim_track` denormalizes album, artist, genre, and media_type; create fact tables (`fct_invoice`, `fct_invoice_line`) with surrogate key references and measures
-  - [x] 5.5 Write Bronze → Silver Continuous Query SQL scripts in `transform/`: one file per entity (e.g., `silver_customer.sql`, `silver_employee.sql`, ..., `silver_playlist_track.sql`); each CQ reads from the corresponding Bronze table, extracts fields from the `after` payload, applies deduplication per primary key ordered by `ts_ms`, converts `op='d'` to `is_deleted=TRUE`, and MERGEs or INSERTs into the Silver table
-  - [x] 5.6 Write Silver → Gold dimension CQ SQL scripts in `transform/`: `gold_dim_customer.sql`, `gold_dim_track.sql` (joining silver track + album + artist + genre + media_type), `gold_dim_employee.sql`; each CQ reads from the Silver layer, closes the existing active record on change (`valid_to = CURRENT_TIMESTAMP()`, `is_active = FALSE`), and inserts a new active record with a new surrogate key (`GENERATE_UUID()` or `FARM_FINGERPRINT`)
-  - [x] 5.7 Write Silver → Gold fact CQ SQL scripts in `transform/`: `gold_fct_invoice.sql` and `gold_fct_invoice_line.sql`; each CQ reads from the Silver layer, joins against active dimension records using natural keys with point-in-time correctness (transaction timestamp between `valid_from` and `valid_to`), and INSERTs enriched rows with surrogate keys and measures
-  - [x] 5.8 Write tests in `tests/test_bigquery_schemas.py`: validate Terraform plan includes all 3 datasets, 11 Bronze tables, 11 Silver tables, 3 dimension tables, and 2 fact tables; verify column names and types match PRD specifications
-  - [x] 5.9 Write tests in `tests/test_continuous_queries.py`: validate SQL syntax of all CQ scripts; verify each CQ references the correct source and target tables; verify `dim_track` joins include album, artist, genre, and media_type
+  - [x] 5.1 Define BigQuery datasets in `infra/bigquery.tf`: create `google_bigquery_dataset` for `bronze`, `silver`, and `gold` datasets in `europe-west1`; create BigQuery reservation with autoscale for Continuous Queries
+  - [x] 5.2 Define Bronze layer tables in `infra/bigquery_bronze.tf`: create `google_bigquery_table` for each of the 11 source tables (e.g., `customer_raw`, `invoice_raw`, `track_raw`) via `for_each` with schema columns matching the Debezium envelope structure and DAY partitioning
+  - [x] 5.3 Define Silver layer tables in `infra/bigquery_silver.tf`: create 5 CQ-populated tables (`customer`, `employee`, `track`, `invoice`, `invoice_line`); 6 reference tables (`artist`, `album`, `genre`, `media_type`, `playlist`, `playlist_track`) are views on Bronze, managed in `bigquery_views.tf`
+  - [x] 5.4 Define Gold layer tables in `infra/bigquery_gold.tf`: create dimension tables (`dim_customer`, `dim_track`, `dim_employee`) and fact tables (`fct_invoice`, `fct_invoice_line`) as Iceberg tables; define 5 scheduled queries (every 5 min) for Silver → Gold transformation
+  - [x] 5.5 Write Bronze → Silver Continuous Query SQL scripts in `transform/silver/cq/`: one file per entity (`customer.sql`, `employee.sql`, `track.sql`, `invoice.sql`, `invoice_line.sql`); each CQ reads from Bronze via `APPENDS()`, extracts fields from the `after` payload, and INSERTs into the Silver table. Reference tables use views instead (in `transform/silver/views/`)
+  - [x] 5.6 Write Silver → Gold dimension scheduled query SQL scripts in `transform/gold/sq/`: `dim_customer.sql`, `dim_track.sql` (joining silver track + album + artist + genre + media_type), `dim_employee.sql`; each SQ runs every 5 minutes with a 10-minute lookback window, implements SCD Type 2 with `is_active` flags and `valid_from`/`valid_to` ranges
+  - [x] 5.7 Write Silver → Gold fact scheduled query SQL scripts in `transform/gold/sq/`: `fct_invoice.sql` and `fct_invoice_line.sql`; each SQ joins against active dimension records using natural keys with surrogate key lookups
+  - [x] 5.8 Write tests in `tests/test_bigquery_schemas.py`: validate Terraform plan includes all 3 datasets, 11 Bronze tables, Silver tables, dimension tables, and fact tables; verify column names and types match PRD specifications
+  - [x] 5.9 Write tests in `tests/test_continuous_queries.py`: validate SQL syntax of all CQ and SQ scripts; verify each references the correct source and target tables; verify `dim_track` joins include album, artist, genre, and media_type; verify views exist in `bigquery_views.tf`
   - [x] 5.10 Add `_loaded_at` and `_source_ts_ms` metadata columns to Silver and Gold tables for observability and lineage tracking
-  - [x] 5.11 Document the BigQuery layer architecture in `README.md` including the Bronze/Silver/Gold pattern, table naming conventions, CQ behavior, and SCD Type 2 logic
+  - [x] 5.11 Document the BigQuery layer architecture in `README.md` including the Bronze/Silver/Gold pattern, table naming conventions, CQ/SQ behavior, and SCD Type 2 logic
 
 - [x] 6.0 Deployment & Teardown Scripts + End-to-End Testing (Complete Vertical Slice)
-  - [x] 6.1 Create `scripts/deploy.sh` that orchestrates the full post-Terraform deployment: (1) runs `data/init_db.sh` for database initialization, (2) builds and pushes the Kafka Connect Docker image via `gcloud builds submit`, (3) waits for the Cloud Run service to become healthy, (4) runs `connect/register-connectors.sh` to register Source and Sink connectors, (5) starts all BigQuery Continuous Queries by executing the SQL scripts in `transform/` via `bq query`; include prerequisite checks, error handling, and step-by-step logging
+  - [x] 6.1 Create `scripts/deploy.sh` that orchestrates the full post-Terraform deployment: (1) runs `data/init_db.sh` for database initialization, (2) builds and pushes the Kafka Connect Docker image via `gcloud builds submit` (Cloud Run mode only), (3) waits for the Cloud Run service to become healthy, (4) registers connectors, (5) starts Silver Continuous Queries from `transform/silver/cq/`; Bronze tables, views, and Gold scheduled queries are managed by Terraform
   - [x] 6.2 Create `scripts/teardown.sh` that cleans up before `terraform destroy`: (1) cancels all running BigQuery Continuous Queries via `bq cancel` or the BigQuery API, (2) drops the logical replication slot in PostgreSQL via `psql`, (3) deletes the Debezium publication; include error handling for resources that may already be deleted
   - [x] 6.3 Write end-to-end tests in `tests/test_cdc_pipeline.py`: insert a row in PostgreSQL and verify it appears in BigQuery Bronze, Silver, and Gold layers within 60 seconds; update a row and verify SCD Type 2 dimension history; delete a row and verify `is_deleted` flag in Silver
   - [x] 6.4 Write tests in `tests/test_pii_masking.py`: query all BigQuery Bronze, Silver, and Gold tables and assert that no `phone` or `fax` columns exist; verify SMT configuration is applied correctly
