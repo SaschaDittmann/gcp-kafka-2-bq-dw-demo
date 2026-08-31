@@ -3,7 +3,7 @@ date: 2026-08-28
 topic: Terraform destroy dependency ordering
 ---
 
-# Terraform Destroy Fails Due to Missing Dependencies
+# Terraform Destroy Fails Due to Runtime Dependencies
 
 ## The Problem / Context
 
@@ -15,29 +15,35 @@ These resources are created by Terraform but have **runtime dependencies** that 
 
 ## The Solution / Learning
 
-Add `depends_on` to enforce a **destroy chain**:
+### `depends_on` Does NOT Work Here
 
-```
-1. CDC connector destroyed    → releases replication slot
-2. chinook database destroyed → drops all owned objects
-3. IAM user destroyed         → no more object dependencies
-```
-
-In Terraform:
+The initial fix attempted was adding `depends_on` to reverse the destroy order:
 
 ```hcl
-# cloudsql.tf
+# ❌ BROKEN — this reverses the CREATE order too!
 resource "google_sql_database" "chinook" {
-  # ...
   depends_on = [google_managed_kafka_connector.cdc_source]
-}
-
-# iam.tf
-resource "google_sql_user" "managed_kafka_iam" {
-  # ...
-  depends_on = [google_sql_database.chinook]
 }
 ```
 
-**Key insight**: `depends_on` affects **both** create and destroy ordering. During create, it ensures the dependency is built first. During destroy, it ensures the dependent is destroyed **before** the dependency. Think about what runtime state (replication slots, object ownership, connections) your resources create outside of Terraform's knowledge.
+**`depends_on` applies the same ordering to both create and destroy.** This means during create, Terraform tries to create the connector *before* the database — which fails because the connector needs the database to connect to.
+
+### Correct Approach: Teardown Script
+
+Since create and destroy need **opposite** orderings, Terraform alone cannot solve this. Use a **teardown script** that runs before `terraform destroy`:
+
+```bash
+# scripts/teardown.sh handles:
+# 1. Cancel running CQs
+# 2. Drop the replication slot (pg_drop_replication_slot)
+# 3. Drop the publication
+```
+
+**Workflow:**
+```
+./scripts/teardown.sh   # Clean up runtime state
+terraform destroy       # Now safe to destroy all resources
+```
+
+**Key insight:** When resources create runtime state that Terraform doesn't manage (replication slots, object ownership, connections), cleanup must happen in a script before `terraform destroy`, not via `depends_on`.
 

@@ -96,11 +96,9 @@ resource "google_sql_database" "chinook" {
   charset   = "UTF8"
   collation = "en_US.UTF8"
 
-  # Connectors must be destroyed first — the CDC source holds a replication
-  # slot on this database which blocks DROP DATABASE.
-  depends_on = [
-    google_managed_kafka_connector.cdc_source,
-  ]
+  # NOTE: On destroy, the CDC connector's replication slot blocks DROP DATABASE.
+  # Run scripts/teardown.sh before terraform destroy to clean up runtime state
+  # (replication slot, object ownership) that Terraform cannot manage.
 }
 
 # -----------------------------------------------------------------------------

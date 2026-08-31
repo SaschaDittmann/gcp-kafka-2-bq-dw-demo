@@ -81,12 +81,9 @@ resource "google_sql_user" "managed_kafka_iam" {
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
   project  = var.project_id
 
-  # The CDC connector grants this user object ownership in chinook.
-  # Database must be destroyed first (dropping owned objects) before
-  # this user can be deleted.
-  depends_on = [
-    google_sql_database.chinook,
-  ]
+  # NOTE: On destroy, the CDC connector grants this user object ownership.
+  # Run scripts/teardown.sh before terraform destroy to drop the database
+  # first (removing owned objects), then this user can be deleted.
 }
 
 # -----------------------------------------------------------------------------
