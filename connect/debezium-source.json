@@ -10,7 +10,7 @@
     "database.password": "${DB_REPL_PASSWORD}",
     "database.dbname": "chinook",
 
-    "topic.prefix": "chinook",
+    "topic.prefix": "cdc",
     "table.include.list": "public.*",
     "plugin.name": "pgoutput",
     "slot.name": "debezium_slot",
@@ -20,9 +20,8 @@
     "key.converter": "org.apache.kafka.connect.json.JsonConverter",
     "key.converter.schemas.enable": "false",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-    "value.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "true",
 
-    "database.server.name": "chinook",
     "snapshot.mode": "initial",
     "decimal.handling.mode": "double",
     "time.precision.mode": "connect",

@@ -32,7 +32,7 @@ locals {
     CONNECT_KEY_CONVERTER                     = "org.apache.kafka.connect.json.JsonConverter"
     CONNECT_VALUE_CONVERTER                   = "org.apache.kafka.connect.json.JsonConverter"
     CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE      = "false"
-    CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE    = "false"
+    CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE    = "true"
     CONNECT_PLUGIN_PATH                       = "/usr/share/confluent-hub-components,/etc/kafka-connect/jars"
 
     # SASL/OAUTHBEARER auth — worker

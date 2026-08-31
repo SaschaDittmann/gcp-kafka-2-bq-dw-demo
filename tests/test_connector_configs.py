@@ -120,6 +120,21 @@ def test_source_uses_json_converter(source_config):
         "Source must use JSON value converter"
     )
 
+def test_source_schemas_enable_is_true(source_config):
+    """BQ sink requires embedded Debezium schema for type inference."""
+    config = source_config["config"]
+    assert config.get("value.converter.schemas.enable") == "true", (
+        "value.converter.schemas.enable must be 'true' — "
+        "the BigQuery sink needs embedded schema for table creation"
+    )
+
+def test_source_topic_prefix_is_cdc(source_config):
+    """Topic prefix must be 'cdc' to match the BQ sink topics.regex."""
+    config = source_config["config"]
+    assert config["topic.prefix"] == "cdc", (
+        "topic.prefix must be 'cdc' to match sink regex 'cdc\\.public\\..*'"
+    )
+
 BIGQUERY_REQUIRED_FIELDS = [
     "connector.class",
     "topics.regex",
