@@ -113,6 +113,14 @@ resource "google_managed_kafka_connect_cluster" "connect" {
 # Captures changes via logical replication (pgoutput plugin).
 # -----------------------------------------------------------------------------
 
+# Wait for Cloud SQL IAM authentication to propagate.
+# The managed_kafka_iam user is created moments before the connector
+# tries to connect. Without this delay, IAM auth fails on fresh deployments.
+resource "time_sleep" "iam_propagation" {
+  depends_on      = [google_sql_user.managed_kafka_iam]
+  create_duration = "60s"
+}
+
 resource "google_managed_kafka_connector" "cdc_source" {
   count           = var.source_connector_type == "managed" ? 1 : 0
   provider        = google-beta
@@ -166,6 +174,11 @@ resource "google_managed_kafka_connector" "cdc_source" {
     create = "30m"
     delete = "10m"
   }
+
+  depends_on = [
+    time_sleep.iam_propagation,
+    google_sql_database.chinook,
+  ]
 }
 
 # -----------------------------------------------------------------------------
