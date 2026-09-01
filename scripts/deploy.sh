@@ -9,6 +9,8 @@
 #   4. Wait for Cloud Run services to become healthy (Cloud Run mode only)
 #   5. Register Kafka Connect connectors (Cloud Run mode only)
 #   6. Start BigQuery Continuous Queries
+#   7. Wait for Silver layer to populate
+#   8. Backfill Gold layer (initial load without lookback filter)
 #
 # Prerequisites:
 #   - `terraform apply` has been run successfully in infra/
@@ -19,9 +21,10 @@
 #   ./scripts/deploy.sh
 #
 # Optional environment variables:
-#   SKIP_DB_INIT      - Set to "true" to skip database initialization
-#   SKIP_IMAGE_BUILD  - Set to "true" to skip Docker image build
-#   SKIP_CQ_START     - Set to "true" to skip Continuous Query startup
+#   SKIP_DB_INIT        - Set to "true" to skip database initialization
+#   SKIP_IMAGE_BUILD    - Set to "true" to skip Docker image build
+#   SKIP_CQ_START       - Set to "true" to skip Continuous Query startup
+#   SKIP_GOLD_BACKFILL  - Set to "true" to skip Gold layer initial backfill
 # =============================================================================
 
 set -euo pipefail
@@ -31,7 +34,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 INFRA_DIR="${PROJECT_ROOT}/infra"
 
 STEP=0
-TOTAL_STEPS=7
+TOTAL_STEPS=8
 ERRORS=0
 
 # -----------------------------------------------------------------------------
@@ -358,6 +361,101 @@ step_start_continuous_queries() {
 }
 
 # =============================================================================
+# Step 7: Wait for Silver Layer to Populate
+# =============================================================================
+# After CQs start, Bronze data needs time to flow into Silver.
+# We poll a Silver CQ table until it has rows (or timeout).
+
+step_wait_for_silver() {
+  log_step "Waiting for Silver layer to populate"
+
+  if [[ "${SKIP_CQ_START:-false}" == "true" ]]; then
+    log_warn "CQs were skipped — skipping Silver wait"
+    return 0
+  fi
+
+  local max_attempts=30
+  local interval=10
+  local attempt=0
+
+  log_info "Polling silver.customer for data (up to $((max_attempts * interval))s)..."
+  while [[ ${attempt} -lt ${max_attempts} ]]; do
+    attempt=$((attempt + 1))
+    local count
+    count=$(bq query --use_legacy_sql=false --project_id="${PROJECT_ID}" --format=csv --quiet \
+      "SELECT COUNT(*) FROM silver.customer" 2>/dev/null | tail -1) || count="0"
+
+    if [[ "${count}" -gt 0 ]] 2>/dev/null; then
+      log_success "Silver layer has data (customer count: ${count})"
+      return 0
+    fi
+    log_info "Attempt ${attempt}/${max_attempts}: silver.customer is empty — retrying in ${interval}s"
+    sleep "${interval}"
+  done
+
+  log_warn "Silver layer did not populate within timeout — Gold backfill may find no data"
+  return 0  # Non-fatal
+}
+
+# =============================================================================
+# Step 8: Backfill Gold Layer (Initial Load)
+# =============================================================================
+# On fresh deployments, the Gold scheduled queries' 10-minute lookback window
+# misses data from the initial CQ load. This step runs each Gold SQ once
+# without the lookback filter to backfill the initial data.
+
+step_backfill_gold() {
+  log_step "Backfilling Gold layer (initial load)"
+
+  if [[ "${SKIP_GOLD_BACKFILL:-false}" == "true" ]]; then
+    log_warn "Skipping Gold backfill (SKIP_GOLD_BACKFILL=true)"
+    return 0
+  fi
+
+  local sq_dir="${PROJECT_ROOT}/transform/gold/sq"
+  local backfill_errors=0
+
+  local gold_sqs=(
+    "dim_customer.sql"
+    "dim_employee.sql"
+    "dim_track.sql"
+    "fct_invoice.sql"
+    "fct_invoice_line.sql"
+  )
+
+  for sq_file in "${gold_sqs[@]}"; do
+    local sq_path="${sq_dir}/${sq_file}"
+    if [[ ! -f "${sq_path}" ]]; then
+      log_error "SQ file not found: ${sq_path}"
+      backfill_errors=$((backfill_errors + 1))
+      continue
+    fi
+
+    log_info "Backfilling: ${sq_file}"
+
+    # Read SQL, substitute project, remove the lookback filter line
+    local sq_sql
+    sq_sql=$(sed "s/\${PROJECT_ID}/${PROJECT_ID}/g" "${sq_path}" | \
+      grep -v "TIMESTAMP_SUB(CURRENT_TIMESTAMP()")
+
+    if bq query --use_legacy_sql=false --project_id="${PROJECT_ID}" --quiet \
+         "${sq_sql}" 2>/dev/null; then
+      log_success "Backfilled: ${sq_file}"
+    else
+      log_warn "Failed to backfill: ${sq_file}"
+      backfill_errors=$((backfill_errors + 1))
+    fi
+  done
+
+  if [[ ${backfill_errors} -gt 0 ]]; then
+    log_warn "${backfill_errors} Gold SQ(s) failed to backfill"
+    return 0  # Non-fatal
+  fi
+
+  log_success "Gold layer backfill completed"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -375,6 +473,8 @@ main() {
   step_wait_for_cloudrun  || { log_error "Cloud Run health check failed — cannot continue"; exit 1; }
   step_register_connectors || true
   step_start_continuous_queries || true
+  step_wait_for_silver     || true
+  step_backfill_gold       || true
 
   # Summary
   echo ""
