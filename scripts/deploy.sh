@@ -74,7 +74,7 @@ check_prerequisites() {
   log_info "Checking prerequisites..."
 
   local missing=0
-  for cmd in gcloud bq terraform; do
+  for cmd in gcloud bq terraform envsubst; do
     if ! command -v "${cmd}" &> /dev/null; then
       log_error "Required command '${cmd}' not found in PATH"
       missing=$((missing + 1))
@@ -236,7 +236,7 @@ step_wait_for_cloudrun() {
       conditions=$(gcloud run services describe "${service}" \
         --region="${REGION}" \
         --project="${PROJECT_ID}" \
-        --format="value(status.conditions[0].status)" 2>/dev/null) || true
+        --format="value(status.conditions.filter(type=Ready).status)" 2>/dev/null) || true
 
       if [[ "${conditions}" == "True" ]]; then
         log_success "Service '${service}' is healthy"

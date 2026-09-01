@@ -54,7 +54,11 @@ locals {
     CONNECT_CONSUMER_SASL_JAAS_CONFIG                  = "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;"
   }
 
-  connect_image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}/kafka-connect:latest"
+  # Placeholder image for initial terraform apply. On fresh deployments the
+  # custom image doesn't exist in Artifact Registry yet (built later by
+  # deploy.sh step 2). Using the base image lets Terraform create the Cloud
+  # Run service; deploy.sh step 3 then updates it to the real image.
+  connect_image = "confluentinc/cp-kafka-connect:7.7.1"
 }
 
 # =============================================================================

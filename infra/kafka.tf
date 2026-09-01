@@ -94,3 +94,46 @@ resource "google_managed_kafka_topic" "chinook" {
   }
 }
 
+# -----------------------------------------------------------------------------
+# Kafka Connect Internal Topics (Cloud Run mode only)
+# -----------------------------------------------------------------------------
+# When running Kafka Connect on Cloud Run, the worker needs 3 internal
+# topics for config, offset, and status storage. Managed Kafka does not
+# auto-create topics, so we pre-create them here.
+# These are NOT needed in managed mode — Managed Kafka Connect handles
+# its own internal topics.
+# -----------------------------------------------------------------------------
+
+locals {
+  connect_internal_topics = var.source_connector_type == "cloudrun" ? {
+    "source-connect-configs" = {
+      partitions     = 1
+      cleanup_policy = "compact"
+    }
+    "source-connect-offsets" = {
+      partitions     = 25
+      cleanup_policy = "compact"
+    }
+    "source-connect-status" = {
+      partitions     = 5
+      cleanup_policy = "compact"
+    }
+  } : {}
+}
+
+resource "google_managed_kafka_topic" "connect_internal" {
+  for_each = local.connect_internal_topics
+
+  provider           = google-beta
+  project            = var.project_id
+  cluster            = google_managed_kafka_cluster.cluster.cluster_id
+  location           = var.region
+  topic_id           = each.key
+  partition_count    = each.value.partitions
+  replication_factor = 3
+
+  configs = {
+    "cleanup.policy" = each.value.cleanup_policy
+  }
+}
+
