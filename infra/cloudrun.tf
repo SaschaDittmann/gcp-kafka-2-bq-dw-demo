@@ -19,21 +19,23 @@ locals {
   kafka_bootstrap_servers = "bootstrap.${google_managed_kafka_cluster.cluster.cluster_id}.${var.region}.managedkafka.${var.project_id}.cloud.goog:9092"
 
   connect_source_env = {
-    CONNECT_REST_PORT                         = "8080"
-    CONNECT_REST_ADVERTISED_HOST_NAME         = "localhost"
-    CONNECT_BOOTSTRAP_SERVERS                 = local.kafka_bootstrap_servers
-    CONNECT_GROUP_ID                          = "cdc-source-group"
-    CONNECT_CONFIG_STORAGE_TOPIC              = "source-connect-configs"
-    CONNECT_OFFSET_STORAGE_TOPIC              = "source-connect-offsets"
-    CONNECT_STATUS_STORAGE_TOPIC              = "source-connect-status"
+    # Debezium Connect well-known env vars
+    BOOTSTRAP_SERVERS   = local.kafka_bootstrap_servers
+    GROUP_ID            = "cdc-source-group"
+    CONFIG_STORAGE_TOPIC = "source-connect-configs"
+    OFFSET_STORAGE_TOPIC = "source-connect-offsets"
+    STATUS_STORAGE_TOPIC = "source-connect-status"
+    KEY_CONVERTER       = "org.apache.kafka.connect.json.JsonConverter"
+    VALUE_CONVERTER     = "org.apache.kafka.connect.json.JsonConverter"
+    REST_PORT           = "8080"
+    REST_ADVERTISED_HOST_NAME = "localhost"
+
+    # Additional Connect worker properties (CONNECT_ prefix → dots)
     CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR = "3"
     CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR = "3"
     CONNECT_STATUS_STORAGE_REPLICATION_FACTOR = "3"
-    CONNECT_KEY_CONVERTER                     = "org.apache.kafka.connect.json.JsonConverter"
-    CONNECT_VALUE_CONVERTER                   = "org.apache.kafka.connect.json.JsonConverter"
     CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE      = "false"
     CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE    = "true"
-    CONNECT_PLUGIN_PATH                       = "/usr/share/confluent-hub-components,/etc/kafka-connect/jars"
 
     # SASL/OAUTHBEARER auth — worker
     CONNECT_SECURITY_PROTOCOL                 = "SASL_SSL"
