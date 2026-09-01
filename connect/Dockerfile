@@ -39,16 +39,15 @@ RUN mkdir -p /usr/share/confluent-hub-components/debezium-connector-postgresql &
 #   /etc/kafka-connect/jars/  — for the Connect worker plugin path
 #   /usr/share/java/kafka/    — for the Confluent kafka-ready preflight check
 #     (it uses the standard Kafka classpath, not CONNECT_PLUGIN_PATH)
+# Runs as root because /usr/share/java/kafka/ is owned by root.
 # -----------------------------------------------------------------------------
+USER root
 RUN mkdir -p /tmp/gmk-auth /etc/kafka-connect/jars/ && \
     curl -sL "https://github.com/googleapis/managedkafka/releases/download/v${MANAGED_KAFKA_AUTH_VERSION}/release-and-dependencies.zip" \
       -o /tmp/gmk-auth/release.zip && \
     python3 -c "import zipfile,os; z=zipfile.ZipFile('/tmp/gmk-auth/release.zip'); [open('/etc/kafka-connect/jars/'+os.path.basename(n),'wb').write(z.read(n)) for n in z.namelist() if not n.endswith('/')]" && \
+    cp /etc/kafka-connect/jars/*.jar /usr/share/java/kafka/ && \
     rm -rf /tmp/gmk-auth
-
-# Copy auth JARs to Kafka libs (needs root — dir owned by root in base image)
-USER root
-RUN cp /etc/kafka-connect/jars/*.jar /usr/share/java/kafka/
 USER appuser
 
 # -----------------------------------------------------------------------------
