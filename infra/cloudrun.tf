@@ -27,8 +27,9 @@ locals {
     STATUS_STORAGE_TOPIC = "source-connect-status"
     KEY_CONVERTER       = "org.apache.kafka.connect.json.JsonConverter"
     VALUE_CONVERTER     = "org.apache.kafka.connect.json.JsonConverter"
-    REST_PORT           = "8080"
-    REST_ADVERTISED_HOST_NAME = "localhost"
+    REST_PORT           = "8083"
+    REST_HOST_NAME      = "0.0.0.0"
+    REST_ADVERTISED_HOST_NAME = "0.0.0.0"
 
     # Additional Connect worker properties (CONNECT_ prefix → dots)
     CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR = "3"
@@ -113,7 +114,7 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
       image = local.connect_image
 
       ports {
-        container_port = 8080
+        container_port = 8083
       }
 
       resources {
@@ -127,7 +128,7 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
       startup_probe {
         http_get {
           path = "/connectors"
-          port = 8080
+          port = 8083
         }
         initial_delay_seconds = 30
         period_seconds        = 10
