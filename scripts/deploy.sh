@@ -173,6 +173,14 @@ step_build_image() {
     return 0
   fi
 
+  # Check if image already exists (e.g. built by Terraform's null_resource)
+  if gcloud artifacts docker images describe "${IMAGE_TAG}" \
+       --project="${PROJECT_ID}" &>/dev/null; then
+    log_info "Image already exists in Artifact Registry — skipping build"
+    log_info "To force a rebuild, set SKIP_IMAGE_BUILD=false and delete the image first"
+    return 0
+  fi
+
   log_info "Building image: ${IMAGE_TAG}"
   log_info "Using Cloud Build (no local Docker required)"
 

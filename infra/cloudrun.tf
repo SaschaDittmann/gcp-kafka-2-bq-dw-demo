@@ -54,11 +54,29 @@ locals {
     CONNECT_CONSUMER_SASL_JAAS_CONFIG                  = "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;"
   }
 
-  # Placeholder image for initial terraform apply. On fresh deployments the
-  # custom image doesn't exist in Artifact Registry yet (built later by
-  # deploy.sh step 2). Using the base image lets Terraform create the Cloud
-  # Run service; deploy.sh step 3 then updates it to the real image.
-  connect_image = "confluentinc/cp-kafka-connect:7.7.1"
+  connect_image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}/kafka-connect:latest"
+}
+
+# -----------------------------------------------------------------------------
+# Build Kafka Connect Docker Image via Cloud Build
+# -----------------------------------------------------------------------------
+# Builds and pushes the custom Kafka Connect image to Artifact Registry
+# before the Cloud Run service is created. Re-triggers on Dockerfile changes.
+# -----------------------------------------------------------------------------
+
+resource "null_resource" "build_connect_image" {
+  count = var.source_connector_type == "cloudrun" ? 1 : 0
+
+  triggers = {
+    dockerfile_hash = filemd5("${path.module}/../connect/Dockerfile")
+    config_hash     = filemd5("${path.module}/../connect/debezium-source.json")
+  }
+
+  provisioner "local-exec" {
+    command = "gcloud builds submit ${path.module}/../connect/ --tag=${local.connect_image} --project=${var.project_id} --quiet"
+  }
+
+  depends_on = [google_artifact_registry_repository.docker]
 }
 
 # =============================================================================
@@ -126,7 +144,7 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
   }
 
   depends_on = [
-    google_artifact_registry_repository.docker,
+    null_resource.build_connect_image,
     google_managed_kafka_cluster.cluster,
   ]
 }
