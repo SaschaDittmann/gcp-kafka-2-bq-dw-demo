@@ -41,3 +41,4 @@ WHERE _loaded_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE)
 On fresh deployments, by the time the SQs first run, Silver data may already be older than 10 minutes — resulting in empty Gold tables.
 
 **Fix:** `deploy.sh` step 8 runs each Gold SQ once without the lookback filter to backfill initial data. The `TIMESTAMP_SUB` line is stripped via `grep -v` before executing.
+
