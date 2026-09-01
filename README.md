@@ -302,18 +302,22 @@ This orchestrates the full post-Terraform deployment:
 | Step | Description | Duration |
 |------|-------------|----------|
 | 1 | Initialize Chinook database (schema, seed, replication) | ~2 min |
-| 2 | Build & push Docker image (only if using Cloud Run source) | ~5 min |
-| 3 | Update Cloud Run services (only if using Cloud Run source) | ~1 min |
-| 4 | Wait for Cloud Run services (only if using Cloud Run source) | ~2 min |
-| 5 | Start 5 Silver Continuous Queries (Bronze → Silver) | ~1 min |
+| 2 | Build & push Docker image (Cloud Run mode only) | ~5 min |
+| 3 | Update Cloud Run services (Cloud Run mode only) | ~1 min |
+| 4 | Wait for Cloud Run services (Cloud Run mode only) | ~2 min |
+| 5 | Register connectors (Cloud Run mode only) | ~1 min |
+| 6 | Start 5 Silver Continuous Queries (Bronze → Silver) | ~1 min |
+| 7 | Wait for Silver layer to populate | ~30s–5 min |
+| 8 | Backfill Gold layer (initial load without lookback filter) | ~1 min |
 
 Note: Bronze tables, Silver/Gold views, and Gold scheduled queries are all managed by Terraform (auto-deployed on `terraform apply`).
 
 **Skip flags** (useful for re-runs):
 ```bash
-SKIP_DB_INIT=true ./scripts/deploy.sh       # Skip database initialization
-SKIP_IMAGE_BUILD=true ./scripts/deploy.sh   # Skip Docker image build
-SKIP_CQ_START=true ./scripts/deploy.sh      # Skip Continuous Query startup
+SKIP_DB_INIT=true ./scripts/deploy.sh         # Skip database initialization
+SKIP_IMAGE_BUILD=true ./scripts/deploy.sh     # Skip Docker image build
+SKIP_CQ_START=true ./scripts/deploy.sh        # Skip Continuous Query startup
+SKIP_GOLD_BACKFILL=true ./scripts/deploy.sh   # Skip Gold layer initial backfill
 ```
 
 ### 4. Verify
