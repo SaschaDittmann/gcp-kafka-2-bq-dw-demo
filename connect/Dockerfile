@@ -35,20 +35,18 @@ RUN mkdir -p /usr/share/confluent-hub-components/debezium-connector-postgresql &
 # -----------------------------------------------------------------------------
 # Install Google Managed Kafka Auth Library
 # (Provides GcpLoginCallbackHandler for OAUTHBEARER authentication)
-# JARs go to two locations:
-#   /etc/kafka-connect/jars/  — for the Connect worker plugin path
-#   /usr/share/java/kafka/    — for the Confluent kafka-ready preflight check
-#     (it uses the standard Kafka classpath, not CONNECT_PLUGIN_PATH)
-# Runs as root because /usr/share/java/kafka/ is owned by root.
+# Installed to /etc/kafka-connect/jars/ for the Connect worker plugin path.
+# CUB_CLASSPATH makes the JARs visible to the Confluent kafka-ready
+# preflight check, which uses its own classpath (not CONNECT_PLUGIN_PATH).
 # -----------------------------------------------------------------------------
-USER root
 RUN mkdir -p /tmp/gmk-auth /etc/kafka-connect/jars/ && \
     curl -sL "https://github.com/googleapis/managedkafka/releases/download/v${MANAGED_KAFKA_AUTH_VERSION}/release-and-dependencies.zip" \
       -o /tmp/gmk-auth/release.zip && \
     python3 -c "import zipfile,os; z=zipfile.ZipFile('/tmp/gmk-auth/release.zip'); [open('/etc/kafka-connect/jars/'+os.path.basename(n),'wb').write(z.read(n)) for n in z.namelist() if not n.endswith('/')]" && \
-    cp /etc/kafka-connect/jars/*.jar /usr/share/java/kafka/ && \
     rm -rf /tmp/gmk-auth
-USER appuser
+
+# Add auth JARs to CUB classpath (Confluent Utility Belt / preflight checks)
+ENV CUB_CLASSPATH="/etc/kafka-connect/jars/*"
 
 # -----------------------------------------------------------------------------
 # Kafka Connect worker configuration via environment variables
