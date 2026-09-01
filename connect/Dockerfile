@@ -35,11 +35,16 @@ RUN mkdir -p /usr/share/confluent-hub-components/debezium-connector-postgresql &
 # -----------------------------------------------------------------------------
 # Install Google Managed Kafka Auth Library
 # (Provides GcpLoginCallbackHandler for OAUTHBEARER authentication)
+# JARs go to two locations:
+#   /etc/kafka-connect/jars/  — for the Connect worker plugin path
+#   /usr/share/java/kafka/    — for the Confluent kafka-ready preflight check
+#     (it uses the standard Kafka classpath, not CONNECT_PLUGIN_PATH)
 # -----------------------------------------------------------------------------
 RUN mkdir -p /tmp/gmk-auth /etc/kafka-connect/jars/ && \
     curl -sL "https://github.com/googleapis/managedkafka/releases/download/v${MANAGED_KAFKA_AUTH_VERSION}/release-and-dependencies.zip" \
       -o /tmp/gmk-auth/release.zip && \
     python3 -c "import zipfile,os; z=zipfile.ZipFile('/tmp/gmk-auth/release.zip'); [open('/etc/kafka-connect/jars/'+os.path.basename(n),'wb').write(z.read(n)) for n in z.namelist() if not n.endswith('/')]" && \
+    cp /etc/kafka-connect/jars/*.jar /usr/share/java/kafka/ && \
     rm -rf /tmp/gmk-auth
 
 # -----------------------------------------------------------------------------
