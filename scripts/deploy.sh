@@ -274,7 +274,7 @@ step_register_connectors() {
     return 0
   fi
 
-  # Get the Cloud Run service URL and authenticate directly (no proxy needed)
+  # Get the Cloud Run service URL (publicly invocable via IAM binding)
   local service_url
   service_url=$(gcloud run services describe "${SOURCE_SERVICE}" \
     --region="${REGION}" \
@@ -287,19 +287,8 @@ step_register_connectors() {
   fi
   log_info "Source service URL: ${service_url}"
 
-  # Get identity token for Cloud Run authentication
-  local identity_token
-  identity_token=$(gcloud auth print-identity-token \
-    --audiences="${service_url}" 2>/dev/null) || true
-
-  if [[ -z "${identity_token}" ]]; then
-    log_error "Could not obtain identity token for ${service_url}"
-    return 1
-  fi
-
   # Set environment variables for register-connectors.sh
   export SOURCE_CONNECT_URL="${service_url}"
-  export CONNECT_AUTH_HEADER="Authorization: Bearer ${identity_token}"
   export DB_HOST
   export DB_REPL_USER="debezium"
   export DB_REPL_PASSWORD="${REPL_PASSWORD}"
