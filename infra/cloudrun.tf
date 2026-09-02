@@ -155,6 +155,20 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
 
 # Allow unauthenticated access to the Kafka Connect REST API.
 # The service only exposes the Connect REST API — no sensitive data.
+
+# Override org policy to allow allUsers IAM binding
+resource "google_project_organization_policy" "allow_public_invoker" {
+  count      = var.source_connector_type == "cloudrun" ? 1 : 0
+  project    = var.project_id
+  constraint = "iam.allowedPolicyMemberDomains"
+
+  list_policy {
+    allow {
+      all = true
+    }
+  }
+}
+
 resource "google_cloud_run_v2_service_iam_member" "source_invoker" {
   count    = var.source_connector_type == "cloudrun" ? 1 : 0
   project  = var.project_id
@@ -162,4 +176,6 @@ resource "google_cloud_run_v2_service_iam_member" "source_invoker" {
   name     = google_cloud_run_v2_service.kafka_connect_source[0].name
   role     = "roles/run.invoker"
   member   = "allUsers"
+
+  depends_on = [google_project_organization_policy.allow_public_invoker]
 }
