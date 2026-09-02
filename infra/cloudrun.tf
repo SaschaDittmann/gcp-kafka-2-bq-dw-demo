@@ -27,9 +27,10 @@ locals {
     STATUS_STORAGE_TOPIC = "source-connect-status"
     KEY_CONVERTER       = "org.apache.kafka.connect.json.JsonConverter"
     VALUE_CONVERTER     = "org.apache.kafka.connect.json.JsonConverter"
-    REST_PORT           = "8083"
-    REST_HOST_NAME      = "0.0.0.0"
-    REST_ADVERTISED_HOST_NAME = "0.0.0.0"
+
+    # Bind REST API to all interfaces (required for Cloud Run routing)
+    # In Kafka 3.x+, 'listeners' supersedes deprecated rest.host.name/rest.port
+    CONNECT_LISTENERS   = "http://0.0.0.0:8083"
 
     # Additional Connect worker properties (CONNECT_ prefix → dots)
     CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR = "3"
