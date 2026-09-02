@@ -244,7 +244,8 @@ step_wait_for_cloudrun() {
       conditions=$(gcloud run services describe "${service}" \
         --region="${REGION}" \
         --project="${PROJECT_ID}" \
-        --format="value(status.conditions.filter(type=Ready).status)" 2>/dev/null) || true
+        --format="json(status.conditions)" 2>/dev/null | \
+        python3 -c "import sys,json; d=json.load(sys.stdin); print([c['status'] for c in d.get('status',{}).get('conditions',[]) if c['type']=='Ready'][0])" 2>/dev/null) || true
 
       if [[ "${conditions}" == "True" ]]; then
         log_success "Service '${service}' is healthy"
