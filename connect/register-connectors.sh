@@ -32,6 +32,13 @@ DB_REPL_USER="${DB_REPL_USER:-debezium}"
 DB_REPL_PASSWORD="${DB_REPL_PASSWORD:?ERROR: DB_REPL_PASSWORD environment variable is required}"
 GCP_PROJECT_ID="${GCP_PROJECT_ID:?ERROR: GCP_PROJECT_ID environment variable is required}"
 
+# Optional auth header for Cloud Run (set by deploy.sh)
+CONNECT_AUTH_HEADER="${CONNECT_AUTH_HEADER:-}"
+CURL_AUTH_ARGS=()
+if [[ -n "${CONNECT_AUTH_HEADER}" ]]; then
+  CURL_AUTH_ARGS=(-H "${CONNECT_AUTH_HEADER}")
+fi
+
 MAX_RETRIES=30
 RETRY_INTERVAL=10
 
@@ -63,7 +70,7 @@ wait_for_connect() {
   while [[ ${attempt} -lt ${MAX_RETRIES} ]]; do
     attempt=$((attempt + 1))
     local status_code
-    status_code=$(curl -s -o /dev/null -w "%{http_code}" "${url}/") || true
+    status_code=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_AUTH_ARGS[@]}" "${url}/") || true
     if [[ "${status_code}" == "200" ]]; then
       log_success "${label} is ready (HTTP ${status_code})"
       return 0
@@ -93,7 +100,7 @@ register_connector() {
 
   # Check if connector already exists
   local status_code
-  status_code=$(curl -s -o /dev/null -w "%{http_code}" \
+  status_code=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_AUTH_ARGS[@]}" \
     "${connect_url}/connectors/${connector_name}") || true
 
   local response
@@ -103,6 +110,7 @@ register_connector() {
     local config_only
     config_only=$(echo "${config_json}" | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin)['config']))")
     response=$(curl -s -w "\n%{http_code}" -X PUT \
+      "${CURL_AUTH_ARGS[@]}" \
       -H "Content-Type: application/json" \
       -d "${config_only}" \
       "${connect_url}/connectors/${connector_name}/config")
@@ -110,6 +118,7 @@ register_connector() {
     # Create new connector
     log_info "Creating new connector '${connector_name}'"
     response=$(curl -s -w "\n%{http_code}" -X POST \
+      "${CURL_AUTH_ARGS[@]}" \
       -H "Content-Type: application/json" \
       -d "${config_json}" \
       "${connect_url}/connectors")
@@ -136,7 +145,7 @@ check_connector_status() {
   local connect_url="$1"
   local connector_name="$2"
   local response
-  response=$(curl -s "${connect_url}/connectors/${connector_name}/status") || true
+  response=$(curl -s "${CURL_AUTH_ARGS[@]}" "${connect_url}/connectors/${connector_name}/status") || true
 
   local state
   state=$(echo "${response}" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('connector',{}).get('state','UNKNOWN'))" 2>/dev/null) || state="UNKNOWN"

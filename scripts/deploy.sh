@@ -274,22 +274,32 @@ step_register_connectors() {
     return 0
   fi
 
-  # Cloud Run internal services are not directly reachable from outside the VPC.
-  # Use gcloud run services proxy to create a local tunnel.
-  log_info "Starting proxy tunnels to Cloud Run services..."
-
-  # Start source proxy in background
-  gcloud run services proxy "${SOURCE_SERVICE}" \
+  # Get the Cloud Run service URL and authenticate directly (no proxy needed)
+  local service_url
+  service_url=$(gcloud run services describe "${SOURCE_SERVICE}" \
     --region="${REGION}" \
     --project="${PROJECT_ID}" \
-    --port=8083 &
-  local source_proxy_pid=$!
+    --format="value(status.url)" 2>/dev/null)
 
-  # Give proxies time to start
-  sleep 5
+  if [[ -z "${service_url}" ]]; then
+    log_error "Could not get service URL for ${SOURCE_SERVICE}"
+    return 1
+  fi
+  log_info "Source service URL: ${service_url}"
+
+  # Get identity token for Cloud Run authentication
+  local identity_token
+  identity_token=$(gcloud auth print-identity-token \
+    --audiences="${service_url}" 2>/dev/null) || true
+
+  if [[ -z "${identity_token}" ]]; then
+    log_error "Could not obtain identity token for ${service_url}"
+    return 1
+  fi
 
   # Set environment variables for register-connectors.sh
-  export SOURCE_CONNECT_URL="http://localhost:8083"
+  export SOURCE_CONNECT_URL="${service_url}"
+  export CONNECT_AUTH_HEADER="Authorization: Bearer ${identity_token}"
   export DB_HOST
   export DB_REPL_USER="debezium"
   export DB_REPL_PASSWORD="${REPL_PASSWORD}"
@@ -297,9 +307,6 @@ step_register_connectors() {
 
   local register_rc=0
   bash "${PROJECT_ROOT}/connect/register-connectors.sh" || register_rc=$?
-
-  # Cleanup proxy processes
-  kill "${source_proxy_pid}" 2>/dev/null || true
 
   if [[ ${register_rc} -eq 0 ]]; then
     log_success "Connectors registered successfully"
@@ -497,8 +504,9 @@ main() {
   echo ""
   log_info "Verify the pipeline:"
   if [[ "${SOURCE_CONNECTOR_TYPE}" == "cloudrun" ]]; then
-    log_info "  1. Check connectors: gcloud run services proxy ${SOURCE_SERVICE} --port=8083"
-    log_info "     Then: curl http://localhost:8083/connectors"
+    local svc_url
+    svc_url=$(gcloud run services describe "${SOURCE_SERVICE}" --region="${REGION}" --project="${PROJECT_ID}" --format="value(status.url)" 2>/dev/null) || svc_url="<service-url>"
+    log_info "  1. Check connectors: curl -H \"Authorization: Bearer \$(gcloud auth print-identity-token --audiences=${svc_url})\" ${svc_url}/connectors"
   else
     log_info "  1. Check connectors: curl -s -H \"Authorization: Bearer \$(gcloud auth print-access-token)\" \"https://managedkafka.googleapis.com/v1/projects/${PROJECT_ID}/locations/${REGION}/connectClusters/${CONNECT_CLUSTER}/connectors\""
   fi
