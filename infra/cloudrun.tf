@@ -91,7 +91,7 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
   count               = var.source_connector_type == "cloudrun" ? 1 : 0
   name                = "${var.name_prefix}-connect-source"
   location            = var.region
-  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  ingress             = "INGRESS_TRAFFIC_ALL"
   deletion_protection = false
 
   labels = merge(local.common_labels, {
