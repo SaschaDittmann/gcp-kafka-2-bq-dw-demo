@@ -151,15 +151,3 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
     google_managed_kafka_cluster.cluster,
   ]
 }
-
-# Allow unauthenticated access to the Kafka Connect REST API.
-# This simplifies connector registration from deploy.sh without needing
-# identity tokens. The service only exposes the Connect REST API.
-resource "google_cloud_run_v2_service_iam_member" "source_invoker" {
-  count    = var.source_connector_type == "cloudrun" ? 1 : 0
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.kafka_connect_source[0].name
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-}

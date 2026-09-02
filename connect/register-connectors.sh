@@ -70,7 +70,7 @@ wait_for_connect() {
   while [[ ${attempt} -lt ${MAX_RETRIES} ]]; do
     attempt=$((attempt + 1))
     local status_code
-    status_code=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_AUTH_ARGS[@]}" "${url}/") || true
+    status_code=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_AUTH_ARGS[@]}" "${url}/connectors") || true
     if [[ "${status_code}" == "200" ]]; then
       log_success "${label} is ready (HTTP ${status_code})"
       return 0
