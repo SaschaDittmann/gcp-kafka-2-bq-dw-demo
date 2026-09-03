@@ -171,6 +171,11 @@ output "cloudrun_source_service_url" {
   value       = var.source_connector_type == "cloudrun" ? google_cloud_run_v2_service.kafka_connect_source[0].uri : null
 }
 
+output "cloudrun_deployer_sa_email" {
+  description = "The service account email used for connector deployment."
+  value       = var.source_connector_type == "cloudrun" ? google_service_account.connect_deployer[0].email : null
+}
+
 # -----------------------------------------------------------------------------
 # BigQuery
 # -----------------------------------------------------------------------------

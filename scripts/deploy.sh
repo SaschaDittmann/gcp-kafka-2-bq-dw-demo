@@ -117,6 +117,8 @@ load_terraform_outputs() {
   REPL_PASSWORD=$(terraform -chdir="${INFRA_DIR}" output -raw cloudsql_repl_password)
   AR_URL=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o['artifact_registry_url']['value'])")
   SOURCE_SERVICE=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o.get('cloudrun_source_service_name',{}).get('value') or '')")
+  SOURCE_SERVICE_URL=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o.get('cloudrun_source_service_url',{}).get('value') or '')")
+  DEPLOYER_SA=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o.get('cloudrun_deployer_sa_email',{}).get('value') or '')")
   CONNECT_CLUSTER=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o.get('connect_cluster_id',{}).get('value') or '')")
 
   if [[ -n "${SOURCE_SERVICE}" && "${SOURCE_SERVICE}" != "None" ]]; then
@@ -270,19 +272,24 @@ step_register_connectors() {
     return 0
   fi
 
-  # Use gcloud run services proxy to tunnel to the internal Cloud Run service
-  log_info "Starting proxy tunnel to ${SOURCE_SERVICE}..."
-  gcloud run services proxy "${SOURCE_SERVICE}" \
-    --region="${REGION}" \
-    --project="${PROJECT_ID}" \
-    --port=8083 &
-  local proxy_pid=$!
+  if [[ -z "${SOURCE_SERVICE_URL}" || -z "${DEPLOYER_SA}" ]]; then
+    log_error "Missing Cloud Run service URL or deployer SA email"
+    return 1
+  fi
 
-  # Give proxy time to start
-  sleep 5
+  # Obtain an identity token by impersonating the deployer SA
+  log_info "Authenticating via SA impersonation (${DEPLOYER_SA})..."
+  local id_token
+  id_token=$(gcloud auth print-identity-token \
+    --impersonate-service-account="${DEPLOYER_SA}" \
+    --audiences="${SOURCE_SERVICE_URL}" 2>/dev/null) || {
+    log_error "Failed to obtain identity token. Ensure you have roles/iam.serviceAccountTokenCreator on ${DEPLOYER_SA}"
+    return 1
+  }
 
   # Set environment variables for register-connectors.sh
-  export SOURCE_CONNECT_URL="http://localhost:8083"
+  export SOURCE_CONNECT_URL="${SOURCE_SERVICE_URL}"
+  export CONNECT_AUTH_HEADER="Authorization: Bearer ${id_token}"
   export DB_HOST
   export DB_REPL_USER="debezium"
   export DB_REPL_PASSWORD="${REPL_PASSWORD}"
@@ -290,10 +297,6 @@ step_register_connectors() {
 
   local register_rc=0
   bash "${PROJECT_ROOT}/connect/register-connectors.sh" || register_rc=$?
-
-  # Cleanup proxy process
-  kill "${proxy_pid}" 2>/dev/null || true
-  wait "${proxy_pid}" 2>/dev/null || true
 
   if [[ ${register_rc} -eq 0 ]]; then
     log_success "Connectors registered successfully"
@@ -511,8 +514,7 @@ main() {
   echo ""
   log_info "Verify the pipeline:"
   if [[ "${SOURCE_CONNECTOR_TYPE}" == "cloudrun" ]]; then
-    log_info "  1. Check connectors: gcloud run services proxy ${SOURCE_SERVICE} --region=${REGION} --project=${PROJECT_ID} --port=8083"
-    log_info "     Then: curl http://localhost:8083/connectors"
+    log_info "  1. Check connectors: curl -H \"Authorization: Bearer \$(gcloud auth print-identity-token --impersonate-service-account=${DEPLOYER_SA} --audiences=${SOURCE_SERVICE_URL})\" ${SOURCE_SERVICE_URL}/connectors"
   else
     log_info "  1. Check connectors: curl -s -H \"Authorization: Bearer \$(gcloud auth print-access-token)\" \"https://managedkafka.googleapis.com/v1/projects/${PROJECT_ID}/locations/${REGION}/connectClusters/${CONNECT_CLUSTER}/connectors\""
   fi

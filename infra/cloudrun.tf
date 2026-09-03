@@ -152,15 +152,36 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
   ]
 }
 
-# Grant the deployer roles/run.invoker so that gcloud run services proxy
-# can authenticate when registering connectors via deploy.sh.
-data "google_client_openid_userinfo" "me" {}
+# -----------------------------------------------------------------------------
+# Service Account for Connector Deployment
+# -----------------------------------------------------------------------------
+# A dedicated SA used by deploy.sh to authenticate when registering connectors
+# via the Cloud Run REST API. The deployer impersonates this SA to obtain an
+# identity token with the correct audience.
 
+resource "google_service_account" "connect_deployer" {
+  count        = var.source_connector_type == "cloudrun" ? 1 : 0
+  account_id   = "${var.name_prefix}-connect-deploy"
+  display_name = "Kafka Connect Deployer"
+  project      = var.project_id
+}
+
+# Allow the SA to invoke the Cloud Run source service
 resource "google_cloud_run_v2_service_iam_member" "source_invoker" {
   count    = var.source_connector_type == "cloudrun" ? 1 : 0
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_service.kafka_connect_source[0].name
   role     = "roles/run.invoker"
-  member   = "user:${data.google_client_openid_userinfo.me.email}"
+  member   = "serviceAccount:${google_service_account.connect_deployer[0].email}"
+}
+
+# Allow the Terraform deployer to impersonate this SA (for identity tokens)
+data "google_client_openid_userinfo" "me" {}
+
+resource "google_service_account_iam_member" "deployer_can_impersonate" {
+  count              = var.source_connector_type == "cloudrun" ? 1 : 0
+  service_account_id = google_service_account.connect_deployer[0].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "user:${data.google_client_openid_userinfo.me.email}"
 }
