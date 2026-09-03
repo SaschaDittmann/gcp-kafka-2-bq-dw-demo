@@ -400,7 +400,7 @@ step_wait_for_silver() {
     return 0
   fi
 
-  local max_attempts=30
+  local max_attempts=60
   local interval=10
   local attempt=0
 
