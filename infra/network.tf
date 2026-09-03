@@ -87,6 +87,7 @@ resource "google_compute_firewall" "allow_health_checks" {
 # -----------------------------------------------------------------------------
 
 resource "google_vpc_access_connector" "connector" {
+  count         = var.source_connector_type == "cloudrun" ? 1 : 0
   name          = "${var.name_prefix}-vpc-connector"
   region        = var.region
   network       = google_compute_network.vpc.name

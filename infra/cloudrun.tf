@@ -58,7 +58,7 @@ locals {
     CONNECT_CONSUMER_SASL_JAAS_CONFIG                  = "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;"
   }
 
-  connect_image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}/kafka-connect:latest"
+  connect_image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker[0].repository_id}/kafka-connect:latest"
 }
 
 # -----------------------------------------------------------------------------
@@ -106,7 +106,7 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
     }
 
     vpc_access {
-      connector = google_vpc_access_connector.connector.id
+      connector = google_vpc_access_connector.connector[0].id
       egress    = "ALL_TRAFFIC"
     }
 

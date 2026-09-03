@@ -90,7 +90,7 @@ resource "google_sql_user" "managed_kafka_iam" {
 # Cloud Build — Default Compute Engine SA needs storage access
 # gcloud builds submit uses this SA to upload source to the _cloudbuild bucket
 # and write the built image to Artifact Registry.
-# Needed for future Cloud Run Kafka Connect deployment.
+# Only needed when source_connector_type = "cloudrun".
 # -----------------------------------------------------------------------------
 
 data "google_project" "current" {
@@ -98,18 +98,21 @@ data "google_project" "current" {
 }
 
 resource "google_project_iam_member" "cloudbuild_storage" {
+  count   = var.source_connector_type == "cloudrun" ? 1 : 0
   project = var.project_id
   role    = "roles/storage.admin"
   member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
 }
 
 resource "google_project_iam_member" "cloudbuild_logs" {
+  count   = var.source_connector_type == "cloudrun" ? 1 : 0
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
 }
 
 resource "google_project_iam_member" "cloudbuild_ar_writer" {
+  count   = var.source_connector_type == "cloudrun" ? 1 : 0
   project = var.project_id
   role    = "roles/artifactregistry.writer"
   member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"

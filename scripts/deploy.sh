@@ -115,7 +115,7 @@ load_terraform_outputs() {
   DB_HOST=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o['cloudsql_private_ip']['value'])")
   DB_ADMIN_PASSWORD=$(terraform -chdir="${INFRA_DIR}" output -raw cloudsql_admin_password)
   REPL_PASSWORD=$(terraform -chdir="${INFRA_DIR}" output -raw cloudsql_repl_password)
-  AR_URL=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o['artifact_registry_url']['value'])")
+  AR_URL=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o.get('artifact_registry_url',{}).get('value') or '')")
   SOURCE_SERVICE=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o.get('cloudrun_source_service_name',{}).get('value') or '')")
   SOURCE_SERVICE_URL=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o.get('cloudrun_source_service_url',{}).get('value') or '')")
   DEPLOYER_SA=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o.get('cloudrun_deployer_sa_email',{}).get('value') or '')")
@@ -127,7 +127,7 @@ load_terraform_outputs() {
     export SOURCE_CONNECTOR_TYPE="managed"
   fi
 
-  IMAGE_TAG="${AR_URL}/kafka-connect:latest"
+  IMAGE_TAG="${AR_URL:+${AR_URL}/kafka-connect:latest}"
 
   log_success "Loaded outputs: project=${PROJECT_ID}, region=${REGION}, instance=${INSTANCE_NAME}"
 }

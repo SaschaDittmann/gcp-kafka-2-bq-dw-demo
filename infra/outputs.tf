@@ -139,12 +139,12 @@ output "cdc_archive_bucket" {
 
 output "artifact_registry_repository" {
   description = "The Artifact Registry Docker repository ID."
-  value       = google_artifact_registry_repository.docker.repository_id
+  value       = var.source_connector_type == "cloudrun" ? google_artifact_registry_repository.docker[0].repository_id : null
 }
 
 output "artifact_registry_url" {
   description = "The full Artifact Registry URL for docker push/pull."
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"
+  value       = var.source_connector_type == "cloudrun" ? "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker[0].repository_id}" : null
 }
 
 # -----------------------------------------------------------------------------
@@ -153,12 +153,12 @@ output "artifact_registry_url" {
 
 output "vpc_connector_name" {
   description = "The name of the Serverless VPC Access Connector for Cloud Run."
-  value       = google_vpc_access_connector.connector.name
+  value       = var.source_connector_type == "cloudrun" ? google_vpc_access_connector.connector[0].name : null
 }
 
 output "vpc_connector_id" {
   description = "The full resource ID of the Serverless VPC Access Connector."
-  value       = google_vpc_access_connector.connector.id
+  value       = var.source_connector_type == "cloudrun" ? google_vpc_access_connector.connector[0].id : null
 }
 
 output "cloudrun_source_service_name" {

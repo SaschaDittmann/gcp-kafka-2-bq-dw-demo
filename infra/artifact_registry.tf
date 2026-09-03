@@ -6,6 +6,7 @@
 # =============================================================================
 
 resource "google_artifact_registry_repository" "docker" {
+  count         = var.source_connector_type == "cloudrun" ? 1 : 0
   location      = var.region
   repository_id = "${var.name_prefix}-docker"
   description   = "Docker repository for CDC pipeline container images"
