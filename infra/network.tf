@@ -121,12 +121,14 @@ resource "google_service_networking_connection" "psa" {
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.psa_range.name]
 
-  # On destroy, Cloud SQL is deleted first (reverse dependency order), but GCP
-  # needs 2-3 minutes to fully release internal PSA references. Without this wait,
-  # destroy fails with "Producer services are still using this connection."
+  # On destroy, GCP takes an unpredictable amount of time (3-10+ min) to release
+  # internal PSA references after Cloud SQL is deleted. Rather than guessing a
+  # sleep duration, we remove this resource from state so Terraform skips the
+  # doomed API delete call. The orphaned peering is harmless and gets reused on
+  # next terraform apply.
   provisioner "local-exec" {
     when    = destroy
-    command = "echo 'Waiting 180s for Cloud SQL to release PSA peering...' && sleep 180"
+    command = "echo 'Removing PSA connection from Terraform state (GCP will reuse it on next apply)...' && cd ${path.module} && terraform state rm google_service_networking_connection.psa || true"
   }
 
   depends_on = [google_project_service.apis]
