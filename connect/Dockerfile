@@ -20,7 +20,7 @@
 
 FROM debezium/connect:2.5
 
-ENV MANAGED_KAFKA_AUTH_VERSION=1.0.6
+ARG MANAGED_KAFKA_AUTH_VERSION=1.0.6
 
 # -----------------------------------------------------------------------------
 # Install Google Managed Kafka Auth Library

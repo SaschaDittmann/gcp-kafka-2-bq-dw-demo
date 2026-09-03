@@ -101,10 +101,8 @@ All services communicate over a private custom VPC — no public IP traffic for 
   ┌────────────────┐      │  ┌──────────────┐  ┌───────────────┐   │
   │  Cloud Run     │──────┼──│  VPC Access   │  │   Subnet      │   │
   │ connect-source │      │  │  Connector    │  │  10.0.0.0/22  │   │
-  ├────────────────┤      │  │ 10.8.0.0/28  │  └───────┬───────┘   │
-  │  Cloud Run     │──────┤  └──────┬───────┘          │           │
-  │ connect-sink   │      │         │                  │           │
-  └────────────────┘      │         ▼                  ▼           │
+  └────────────────┘      │  │ 10.8.0.0/28  │  └───────┬───────┘   │
+                          │  └──────┬───────┘          │           │
                           │  ┌──────────────┐  ┌───────────────┐   │
                           │  │  Cloud SQL   │  │ Managed Kafka │   │
                           │  │ (Private IP) │  │  (VPC-bound)  │   │
@@ -289,7 +287,7 @@ terraform apply
 
 > **Note:** The Managed Kafka cluster takes **15–30 minutes** to provision on first apply.
 > You can toggle `source_connector_type` between `"managed"` (default) and `"cloudrun"` in your `terraform.tfvars`.
-> If using Cloud Run, services will show "image not found" errors until `deploy.sh` builds the Docker image.
+> If using Cloud Run, the Docker image is built automatically during `terraform apply` via Cloud Build.
 
 ### 3. Deploy Pipeline
 
@@ -322,7 +320,7 @@ SKIP_GOLD_BACKFILL=true ./scripts/deploy.sh   # Skip Gold layer initial backfill
 
 ### 4. Verify
 
-**Check connector status:**
+**Check connector status (Cloud Run mode):**
 ```bash
 # Proxy into Cloud Run source service
 gcloud run services proxy cdc-demo-connect-source --region=europe-west1 --port=8083 &
@@ -330,6 +328,12 @@ gcloud run services proxy cdc-demo-connect-source --region=europe-west1 --port=8
 # Check connectors
 curl http://localhost:8083/connectors
 curl http://localhost:8083/connectors/debezium-source/status | python3 -m json.tool
+```
+
+**Check connector status (Managed mode):**
+```bash
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "https://managedkafka.googleapis.com/v1/projects/<project-id>/locations/europe-west1/connectClusters/cdc-demo-connect/connectors"
 ```
 
 **Query BigQuery layers:**
@@ -409,10 +413,11 @@ uv run pytest tests/ -v
 
 ## Troubleshooting
 
-### Cloud Run: "Image not found"
+### Cloud Run: Image build failed
 
 *(Only relevant when `source_connector_type = "cloudrun"`)*
-The Docker image hasn't been built yet. Build it manually:
+The Docker image is built automatically during `terraform apply` via Cloud Build.
+If the build fails, rebuild manually:
 ```bash
 gcloud builds submit connect/ \
   --tag=europe-west1-docker.pkg.dev/<project-id>/cdc-demo-docker/kafka-connect:latest

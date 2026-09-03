@@ -235,31 +235,27 @@ step_wait_for_cloudrun() {
   local max_attempts=30
   local interval=10
 
-  for service in "${SOURCE_SERVICE}"; do
-    log_info "Checking service: ${service}"
-    local attempt=0
-    while [[ ${attempt} -lt ${max_attempts} ]]; do
-      attempt=$((attempt + 1))
-      local conditions
-      conditions=$(gcloud run services describe "${service}" \
-        --region="${REGION}" \
-        --project="${PROJECT_ID}" \
-        --format="json(status.conditions)" 2>/dev/null | \
-        python3 -c "import sys,json; d=json.load(sys.stdin); print([c['status'] for c in d.get('status',{}).get('conditions',[]) if c['type']=='Ready'][0])" 2>/dev/null) || true
+  log_info "Checking service: ${SOURCE_SERVICE}"
+  local attempt=0
+  while [[ ${attempt} -lt ${max_attempts} ]]; do
+    attempt=$((attempt + 1))
+    local conditions
+    conditions=$(gcloud run services describe "${SOURCE_SERVICE}" \
+      --region="${REGION}" \
+      --project="${PROJECT_ID}" \
+      --format="json(status.conditions)" 2>/dev/null | \
+      python3 -c "import sys,json; d=json.load(sys.stdin); print([c['status'] for c in d.get('status',{}).get('conditions',[]) if c['type']=='Ready'][0])" 2>/dev/null) || true
 
-      if [[ "${conditions}" == "True" ]]; then
-        log_success "Service '${service}' is healthy"
-        break
-      fi
-      log_info "Attempt ${attempt}/${max_attempts}: ${service} not ready — retrying in ${interval}s"
-      sleep "${interval}"
-    done
-
-    if [[ ${attempt} -ge ${max_attempts} ]]; then
-      log_error "Service '${service}' did not become healthy after ${max_attempts} attempts"
-      return 1
+    if [[ "${conditions}" == "True" ]]; then
+      log_success "Service '${SOURCE_SERVICE}' is healthy"
+      return 0
     fi
+    log_info "Attempt ${attempt}/${max_attempts}: ${SOURCE_SERVICE} not ready — retrying in ${interval}s"
+    sleep "${interval}"
   done
+
+  log_error "Service '${SOURCE_SERVICE}' did not become healthy after ${max_attempts} attempts"
+  return 1
 }
 
 # =============================================================================
