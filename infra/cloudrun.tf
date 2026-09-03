@@ -58,7 +58,7 @@ locals {
     CONNECT_CONSUMER_SASL_JAAS_CONFIG                  = "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;"
   }
 
-  connect_image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker[0].repository_id}/kafka-connect:latest"
+  connect_image = var.source_connector_type == "cloudrun" ? "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker[0].repository_id}/kafka-connect:latest" : ""
 }
 
 # -----------------------------------------------------------------------------
