@@ -152,3 +152,15 @@ resource "google_cloud_run_v2_service" "kafka_connect_source" {
   ]
 }
 
+# Grant the deployer roles/run.invoker so that gcloud run services proxy
+# can authenticate when registering connectors via deploy.sh.
+data "google_client_openid_userinfo" "me" {}
+
+resource "google_cloud_run_v2_service_iam_member" "source_invoker" {
+  count    = var.source_connector_type == "cloudrun" ? 1 : 0
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.kafka_connect_source[0].name
+  role     = "roles/run.invoker"
+  member   = "user:${data.google_client_openid_userinfo.me.email}"
+}
