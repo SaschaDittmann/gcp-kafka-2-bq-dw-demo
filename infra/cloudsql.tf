@@ -96,9 +96,62 @@ resource "google_sql_database" "chinook" {
   charset   = "UTF8"
   collation = "en_US.UTF8"
 
-  # NOTE: On destroy, the CDC connector's replication slot blocks DROP DATABASE.
-  # Run scripts/teardown.sh before terraform destroy to clean up runtime state
-  # (replication slot, object ownership) that Terraform cannot manage.
+  # On destroy: drop the CDC replication slot, publication, and reassign
+  # object ownership from the Managed Kafka IAM user back to admin.
+  # Without this, DROP DATABASE and DROP USER fail due to active slots
+  # and owned objects.
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      echo "Cleaning up CDC runtime state before database deletion..."
+
+      # GCS staging bucket for SQL import
+      GCS_BUCKET="gs://${self.project}-sql-import"
+
+      # 1. Drop replication slot (blocks DROP DATABASE)
+      SQL_FILE=$(mktemp /tmp/teardown_slot_XXXXXX.sql)
+      cat > "$SQL_FILE" <<'SQL'
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT FROM pg_replication_slots WHERE slot_name = 'debezium_slot') THEN
+          PERFORM pg_drop_replication_slot('debezium_slot');
+          RAISE NOTICE 'Dropped replication slot debezium_slot';
+        END IF;
+      END $$;
+      DROP PUBLICATION IF EXISTS debezium_publication;
+      SQL
+      gcloud storage cp "$SQL_FILE" "$GCS_BUCKET/teardown_slot.sql" --quiet 2>&1 || true
+      rm -f "$SQL_FILE"
+      gcloud sql import sql "${self.instance}" "$GCS_BUCKET/teardown_slot.sql" \
+        --database="${self.name}" --user=admin --project="${self.project}" --quiet 2>&1 || true
+      gcloud storage rm "$GCS_BUCKET/teardown_slot.sql" --quiet 2>&1 || true
+
+      # 2. Reassign object ownership from Managed Kafka IAM user to admin
+      SQL_FILE=$(mktemp /tmp/teardown_owner_XXXXXX.sql)
+      cat > "$SQL_FILE" <<'SQL'
+      DO $$
+      DECLARE
+        kafka_user TEXT;
+      BEGIN
+        SELECT usename INTO kafka_user
+          FROM pg_user
+          WHERE usename LIKE 'service-%@gcp-sa-managedkafka.iam';
+        IF kafka_user IS NOT NULL THEN
+          EXECUTE format('REASSIGN OWNED BY %I TO admin', kafka_user);
+          EXECUTE format('DROP OWNED BY %I', kafka_user);
+          RAISE NOTICE 'Reassigned objects from % to admin', kafka_user;
+        END IF;
+      END $$;
+      SQL
+      gcloud storage cp "$SQL_FILE" "$GCS_BUCKET/teardown_owner.sql" --quiet 2>&1 || true
+      rm -f "$SQL_FILE"
+      gcloud sql import sql "${self.instance}" "$GCS_BUCKET/teardown_owner.sql" \
+        --database="${self.name}" --user=admin --project="${self.project}" --quiet 2>&1 || true
+      gcloud storage rm "$GCS_BUCKET/teardown_owner.sql" --quiet 2>&1 || true
+
+      echo "CDC cleanup completed"
+    EOT
+  }
 }
 
 # -----------------------------------------------------------------------------
