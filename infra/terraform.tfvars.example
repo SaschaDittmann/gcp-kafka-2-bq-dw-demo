@@ -16,3 +16,7 @@ name_prefix = "cdc-demo"
 vpc_cidr               = "10.0.1.0/24"
 vpc_connector_cidr     = "10.8.0.0/28"
 psa_cidr_prefix_length = 20
+
+# Kafka Source Connector
+# Note: possible values are "managed" and "cloudrun"
+source_connector_type = "managed"
