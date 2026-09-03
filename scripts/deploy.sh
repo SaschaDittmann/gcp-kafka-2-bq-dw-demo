@@ -322,19 +322,13 @@ step_start_continuous_queries() {
 
   local transform_dir="${PROJECT_ROOT}/transform"
   local cq_errors=0
-
-  # Start Silver CQs first (Bronze → Silver), then Gold (Silver → Gold)
-  local silver_cqs=(
-    "customer.sql"
-    "employee.sql"
-    "track.sql"
-    "invoice.sql"
-    "invoice_line.sql"
-  )
+  local token
+  token=$(gcloud auth print-access-token 2>/dev/null)
 
   log_info "Starting Silver layer CQs (Bronze → Silver)..."
-  for cq_file in "${silver_cqs[@]}"; do
-    local cq_path="${transform_dir}/silver/cq/${cq_file}"
+  for cq_path in "${transform_dir}"/silver/cq/*.sql; do
+    local cq_file
+    cq_file=$(basename "${cq_path}")
     if [[ ! -f "${cq_path}" ]]; then
       log_error "CQ file not found: ${cq_path}"
       cq_errors=$((cq_errors + 1))
@@ -342,15 +336,42 @@ step_start_continuous_queries() {
     fi
 
     log_info "Starting CQ: ${cq_file}"
+    # Strip SQL comments (-- lines) to avoid bq flag parsing issues,
+    # and substitute project ID
     local cq_sql
-    cq_sql=$(sed "s/\${PROJECT_ID}/${PROJECT_ID}/g" "${cq_path}")
+    cq_sql=$(sed "s/\${PROJECT_ID}/${PROJECT_ID}/g; /^--/d" "${cq_path}")
 
-    if bq query --use_legacy_sql=false --continuous=true --project_id="${PROJECT_ID}" \
-         "${cq_sql}" &>/dev/null &
-    then
-      log_success "Started CQ: ${cq_file} (background)"
+    # Use BigQuery REST API to start the CQ job
+    local response
+    response=$(curl -s -X POST \
+      "https://bigquery.googleapis.com/bigquery/v2/projects/${PROJECT_ID}/jobs" \
+      -H "Authorization: Bearer ${token}" \
+      -H "Content-Type: application/json" \
+      -d "$(python3 -c "
+import json, sys
+sql = sys.stdin.read()
+print(json.dumps({'configuration': {'query': {'query': sql, 'useLegacySql': False, 'continuous': True}}}))" <<< "${cq_sql}")")
+
+    local state
+    state=$(echo "${response}" | python3 -c "
+import sys, json
+r = json.load(sys.stdin)
+print(r.get('status', {}).get('state', 'ERROR'))
+" 2>/dev/null) || state="ERROR"
+
+    if [[ "${state}" == "RUNNING" ]]; then
+      log_success "Started CQ: ${cq_file} (${state})"
     else
-      log_warn "Failed to start CQ: ${cq_file} (may require Enterprise edition)"
+      local err_msg
+      err_msg=$(echo "${response}" | python3 -c "
+import sys, json
+r = json.load(sys.stdin)
+err = r.get('status', {}).get('errorResult', {}).get('message', '')
+if not err:
+    err = r.get('error', {}).get('message', 'unknown error')
+print(err)
+" 2>/dev/null) || err_msg="unknown"
+      log_warn "Failed to start CQ: ${cq_file} — ${err_msg}"
       cq_errors=$((cq_errors + 1))
     fi
   done
@@ -360,7 +381,6 @@ step_start_continuous_queries() {
 
   if [[ ${cq_errors} -gt 0 ]]; then
     log_warn "${cq_errors} CQ(s) failed to start — CQs require BigQuery Enterprise edition with slot reservations"
-    log_warn "You can start them manually later: bq query --use_legacy_sql=false --continuous=true < transform/<file>.sql"
     return 0  # Non-fatal — don't block deployment
   fi
 
