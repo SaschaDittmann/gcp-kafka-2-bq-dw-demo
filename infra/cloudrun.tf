@@ -20,17 +20,17 @@ locals {
 
   connect_source_env = {
     # Debezium Connect well-known env vars
-    BOOTSTRAP_SERVERS   = local.kafka_bootstrap_servers
-    GROUP_ID            = "cdc-source-group"
+    BOOTSTRAP_SERVERS    = local.kafka_bootstrap_servers
+    GROUP_ID             = "cdc-source-group"
     CONFIG_STORAGE_TOPIC = "source-connect-configs"
     OFFSET_STORAGE_TOPIC = "source-connect-offsets"
     STATUS_STORAGE_TOPIC = "source-connect-status"
-    KEY_CONVERTER       = "org.apache.kafka.connect.json.JsonConverter"
-    VALUE_CONVERTER     = "org.apache.kafka.connect.json.JsonConverter"
+    KEY_CONVERTER        = "org.apache.kafka.connect.json.JsonConverter"
+    VALUE_CONVERTER      = "org.apache.kafka.connect.json.JsonConverter"
 
     # Bind REST API to all interfaces (required for Cloud Run routing)
     # In Kafka 3.x+, 'listeners' supersedes deprecated rest.host.name/rest.port
-    CONNECT_LISTENERS   = "http://0.0.0.0:8083"
+    CONNECT_LISTENERS = "http://0.0.0.0:8083"
 
     # Additional Connect worker properties (CONNECT_ prefix → dots)
     CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR = "3"

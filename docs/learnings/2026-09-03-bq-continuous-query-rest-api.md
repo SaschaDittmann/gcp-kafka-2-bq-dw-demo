@@ -45,3 +45,4 @@ Key points:
 - Strip `-- comment` lines with `sed '/^--/d'` before passing to avoid flag parsing
 - Check `status.state` in response — should be `RUNNING` for CQs
 - CQs require BigQuery Enterprise edition with slot reservations
+

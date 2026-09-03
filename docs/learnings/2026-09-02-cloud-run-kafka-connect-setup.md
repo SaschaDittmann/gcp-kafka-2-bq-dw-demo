@@ -34,3 +34,4 @@ The `bq` CLI has a CBA/mTLS bug in some environments. Use the BigQuery REST API 
 
 ### 6. Health Check Endpoint
 The Debezium Connect image returns 404 for root path `/` but 200 for `/connectors`. Use `/connectors` for health checks (matches Cloud Run startup probe).
+

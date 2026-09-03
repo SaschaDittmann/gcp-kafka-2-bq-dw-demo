@@ -27,3 +27,4 @@ Switch to `debezium/connect:2.5` which:
 
 ### Critical: Use `listeners` not `rest.host.name`
 In Kafka 3.x+ (Debezium 2.5 uses Kafka 3.7), the `listeners` property supersedes the deprecated `rest.host.name` and `rest.port`. Set `CONNECT_LISTENERS=http://0.0.0.0:8083` for Cloud Run.
+
