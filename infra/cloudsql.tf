@@ -105,8 +105,17 @@ resource "google_sql_database" "chinook" {
     command = <<-EOT
       echo "Cleaning up CDC runtime state before database deletion..."
 
-      # GCS staging bucket for SQL import
+      # GCS staging bucket for SQL import — ensure it exists
       GCS_BUCKET="gs://${self.project}-sql-import"
+      gcloud storage buckets create "$GCS_BUCKET" --project="${self.project}" --location=eu --quiet 2>/dev/null || true
+
+      # Grant Cloud SQL SA access to the bucket (may have been revoked during destroy)
+      CLOUDSQL_SA=$(gcloud sql instances describe "${self.instance}" \
+        --project="${self.project}" --format="value(serviceAccountEmailAddress)" 2>/dev/null) || true
+      if [[ -n "$CLOUDSQL_SA" ]]; then
+        gcloud storage buckets add-iam-policy-binding "$GCS_BUCKET" \
+          --member="serviceAccount:$CLOUDSQL_SA" --role="roles/storage.objectViewer" --quiet 2>/dev/null || true
+      fi
 
       # 1. Drop replication slot (blocks DROP DATABASE)
       SQL_FILE=$(mktemp /tmp/teardown_slot_XXXXXX.sql)
@@ -148,6 +157,10 @@ resource "google_sql_database" "chinook" {
       gcloud sql import sql "${self.instance}" "$GCS_BUCKET/teardown_owner.sql" \
         --database="${self.name}" --user=admin --project="${self.project}" --quiet 2>&1 || true
       gcloud storage rm "$GCS_BUCKET/teardown_owner.sql" --quiet 2>&1 || true
+
+      # Clean up staging bucket
+      gcloud storage rm --recursive "$GCS_BUCKET/" --quiet 2>/dev/null || true
+      gcloud storage buckets delete "$GCS_BUCKET" --quiet 2>/dev/null || true
 
       echo "CDC cleanup completed"
     EOT
