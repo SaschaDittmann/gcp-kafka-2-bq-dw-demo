@@ -122,11 +122,11 @@ resource "google_service_networking_connection" "psa" {
   reserved_peering_ranges = [google_compute_global_address.psa_range.name]
 
   # On destroy, Cloud SQL is deleted first (reverse dependency order), but GCP
-  # needs time to fully release internal PSA references. Without this wait,
+  # needs 2-3 minutes to fully release internal PSA references. Without this wait,
   # destroy fails with "Producer services are still using this connection."
   provisioner "local-exec" {
     when    = destroy
-    command = "echo 'Waiting 60s for Cloud SQL to release PSA peering...' && sleep 60"
+    command = "echo 'Waiting 180s for Cloud SQL to release PSA peering...' && sleep 180"
   }
 
   depends_on = [google_project_service.apis]
