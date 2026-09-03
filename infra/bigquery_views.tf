@@ -113,3 +113,30 @@ resource "google_bigquery_table" "gold_fct_view" {
     google_bigquery_table.gold_fct_invoice_line,
   ]
 }
+
+# -----------------------------------------------------------------------------
+# State migration: gold_view → gold_dim_view / gold_fct_view
+# These moved blocks handle the rename from the single gold_view resource
+# to the split dim/fct resources. Safe to remove after first successful apply.
+# -----------------------------------------------------------------------------
+
+moved {
+  from = google_bigquery_table.gold_view["v_dim_customer"]
+  to   = google_bigquery_table.gold_dim_view["v_dim_customer"]
+}
+moved {
+  from = google_bigquery_table.gold_view["v_dim_employee"]
+  to   = google_bigquery_table.gold_dim_view["v_dim_employee"]
+}
+moved {
+  from = google_bigquery_table.gold_view["v_dim_track"]
+  to   = google_bigquery_table.gold_dim_view["v_dim_track"]
+}
+moved {
+  from = google_bigquery_table.gold_view["v_fct_invoice"]
+  to   = google_bigquery_table.gold_fct_view["v_fct_invoice"]
+}
+moved {
+  from = google_bigquery_table.gold_view["v_fct_invoice_line"]
+  to   = google_bigquery_table.gold_fct_view["v_fct_invoice_line"]
+}
