@@ -62,16 +62,26 @@ log_warn() {
 load_terraform_outputs() {
   log_info "Loading Terraform outputs..."
 
-  if ! terraform -chdir="${INFRA_DIR}" output -json &> /dev/null; then
+  local tf_json
+  if ! tf_json=$(terraform -chdir="${INFRA_DIR}" output -json 2>/dev/null); then
     log_warn "Cannot read Terraform outputs — some cleanup may be skipped"
+    PROJECT_ID=""
+    INSTANCE_NAME=""
     return 1
   fi
 
-  local tf_json
-  tf_json=$(terraform -chdir="${INFRA_DIR}" output -json)
+  PROJECT_ID=$(echo "${tf_json}" | python3 -c "
+import json, sys
+o = json.load(sys.stdin)
+cn = o.get('cloudsql_connection_name', {}).get('value', '')
+print(cn.split(':')[0] if cn else '')
+" 2>/dev/null || echo "")
 
-  PROJECT_ID=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o.get('cloudsql_connection_name',{}).get('value','').split(':')[0])")
-  INSTANCE_NAME=$(echo "${tf_json}" | python3 -c "import json,sys; o=json.load(sys.stdin); print(o['cloudsql_instance_name']['value'])")
+  INSTANCE_NAME=$(echo "${tf_json}" | python3 -c "
+import json, sys
+o = json.load(sys.stdin)
+print(o.get('cloudsql_instance_name', {}).get('value', ''))
+" 2>/dev/null || echo "")
 
   log_success "Loaded outputs: project=${PROJECT_ID}, instance=${INSTANCE_NAME}"
 }
