@@ -79,7 +79,12 @@ resource "null_resource" "build_connect_image" {
     command = "gcloud builds submit ${path.module}/../connect/ --tag=${local.connect_image} --project=${var.project_id} --quiet"
   }
 
-  depends_on = [google_artifact_registry_repository.docker]
+  depends_on = [
+    google_artifact_registry_repository.docker,
+    google_project_iam_member.cloudbuild_storage,
+    google_project_iam_member.cloudbuild_logs,
+    google_project_iam_member.cloudbuild_ar_writer,
+  ]
 }
 
 # =============================================================================

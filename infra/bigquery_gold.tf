@@ -80,6 +80,8 @@ resource "google_bigquery_table" "gold_dim_customer" {
     { name = "_loaded_at", type = "TIMESTAMP", mode = "REQUIRED" },
     { name = "_source_ts_ms", type = "INTEGER", mode = "NULLABLE" },
   ])
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection]
 }
 
 # --- dim_track (SCD Type 2, denormalized, Iceberg) ---
@@ -115,6 +117,8 @@ resource "google_bigquery_table" "gold_dim_track" {
     { name = "_loaded_at", type = "TIMESTAMP", mode = "REQUIRED" },
     { name = "_source_ts_ms", type = "INTEGER", mode = "NULLABLE" },
   ])
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection]
 }
 
 # --- dim_employee (SCD Type 2, Iceberg) ---
@@ -153,6 +157,8 @@ resource "google_bigquery_table" "gold_dim_employee" {
     { name = "_loaded_at", type = "TIMESTAMP", mode = "REQUIRED" },
     { name = "_source_ts_ms", type = "INTEGER", mode = "NULLABLE" },
   ])
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection]
 }
 
 # -----------------------------------------------------------------------------
@@ -187,6 +193,8 @@ resource "google_bigquery_table" "gold_fct_invoice" {
     { name = "_loaded_at", type = "TIMESTAMP", mode = "REQUIRED" },
     { name = "_source_ts_ms", type = "INTEGER", mode = "NULLABLE" },
   ])
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection]
 }
 
 # --- fct_invoice_line (Iceberg) ---
@@ -215,6 +223,8 @@ resource "google_bigquery_table" "gold_fct_invoice_line" {
     { name = "_loaded_at", type = "TIMESTAMP", mode = "REQUIRED" },
     { name = "_source_ts_ms", type = "INTEGER", mode = "NULLABLE" },
   ])
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection]
 }
 
 # -----------------------------------------------------------------------------
