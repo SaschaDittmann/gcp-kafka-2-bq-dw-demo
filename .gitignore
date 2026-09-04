@@ -1,0 +1,59 @@
+# Terraform
+*.tfstate
+*.tfstate.backup
+*.tfstate.*.backup
+.terraform/
+.terraform.tfstate.lock.info
+*.tfvars
+!*.tfvars.example
+
+# Git worktrees
+worktrees/
+
+# =============================================
+# Standard Python / tooling ignores
+# =============================================
+
+# Python
+__pycache__/
+*.py[codz]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+.python-version
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Terraform plans
+*.tfplan
+
+# Docker
+connect/plugins/*.jar
+
+# Script logs
+scripts/*.log
+
+# Jupyter
+.ipynb_checkpoints/

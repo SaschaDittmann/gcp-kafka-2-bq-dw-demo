@@ -1,0 +1,34 @@
+{
+  "name": "debezium-source",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+
+    "database.hostname": "${DB_HOST}",
+    "database.port": "5432",
+    "database.user": "${DB_REPL_USER}",
+    "database.password": "${DB_REPL_PASSWORD}",
+    "database.dbname": "chinook",
+
+    "topic.prefix": "cdc",
+    "table.include.list": "public.*",
+    "plugin.name": "pgoutput",
+    "slot.name": "debezium_slot",
+    "publication.name": "debezium_publication",
+    "publication.autocreate.mode": "disabled",
+
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "true",
+
+    "snapshot.mode": "initial",
+    "decimal.handling.mode": "double",
+    "time.precision.mode": "connect",
+
+    "producer.override.security.protocol": "SASL_SSL",
+    "producer.override.sasl.mechanism": "OAUTHBEARER",
+    "producer.override.sasl.login.callback.handler.class": "com.google.cloud.hosted.kafka.auth.GcpLoginCallbackHandler",
+    "producer.override.sasl.jaas.config": "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;"
+  }
+}

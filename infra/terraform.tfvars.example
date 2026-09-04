@@ -1,0 +1,22 @@
+# =============================================================================
+# Example Terraform Variable Values
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your project-specific values:
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# Note: terraform.tfvars is gitignored to prevent committing sensitive values.
+# =============================================================================
+
+project_id  = "your-project-id"
+region      = "us-central1"
+environment = "demo"
+name_prefix = "cdc-demo"
+
+# Networking
+vpc_cidr               = "10.0.1.0/24"
+vpc_connector_cidr     = "10.8.0.0/28"
+psa_cidr_prefix_length = 20
+
+# Kafka Source Connector
+# Note: possible values are "managed" and "cloudrun"
+source_connector_type = "managed"
