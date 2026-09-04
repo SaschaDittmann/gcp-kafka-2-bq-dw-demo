@@ -62,7 +62,7 @@ gcloud storage cp "${SQL_FILE}" "${GCS_BUCKET}/teardown_slot.sql" --quiet 2>&1 |
 rm -f "${SQL_FILE}"
 
 if gcloud sql import sql "${INSTANCE}" "${GCS_BUCKET}/teardown_slot.sql" \
-    --database="${DATABASE}" --user=admin --project="${PROJECT}" --quiet 2>&1; then
+    --database="${DATABASE}" --user=postgres --project="${PROJECT}" --quiet 2>&1; then
   echo "  ✅ Replication slot and publication dropped"
 else
   echo "  ⚠️  Failed to drop replication slot (may already be gone)"
@@ -96,7 +96,7 @@ gcloud storage cp "${SQL_FILE}" "${GCS_BUCKET}/teardown_owner.sql" --quiet 2>&1 
 rm -f "${SQL_FILE}"
 
 if gcloud sql import sql "${INSTANCE}" "${GCS_BUCKET}/teardown_owner.sql" \
-    --database="${DATABASE}" --user=admin --project="${PROJECT}" --quiet 2>&1; then
+    --database="${DATABASE}" --user=postgres --project="${PROJECT}" --quiet 2>&1; then
   echo "  ✅ Object ownership reassigned to admin"
 else
   echo "  ⚠️  Failed to reassign ownership (may already be clean)"
