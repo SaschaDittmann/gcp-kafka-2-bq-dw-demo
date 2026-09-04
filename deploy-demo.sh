@@ -66,8 +66,9 @@ check_prerequisites() {
 # -----------------------------------------------------------------------------
 
 detect_defaults() {
-  DEFAULT_PROJECT=$(gcloud config get-value project 2>/dev/null || echo "")
-  DEFAULT_REGION=$(gcloud config get-value compute/region 2>/dev/null || echo "")
+  # Prefer Cloud Shell environment variables, fall back to gcloud config
+  DEFAULT_PROJECT="${GOOGLE_CLOUD_PROJECT:-$(gcloud config get-value project 2>/dev/null || echo "")}"
+  DEFAULT_REGION="${CLOUDSDK_COMPUTE_REGION:-$(gcloud config get-value compute/region 2>/dev/null || echo "")}"
 
   if [[ -z "${DEFAULT_REGION}" ]]; then
     DEFAULT_REGION="us-central1"
@@ -216,3 +217,4 @@ main() {
 }
 
 main "$@"
+
