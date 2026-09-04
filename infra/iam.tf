@@ -75,15 +75,14 @@ resource "google_project_iam_member" "managed_kafka_roles" {
 }
 
 # Cloud SQL IAM database user for the Managed Kafka SA
+# NOTE: The chinook database depends_on this user, so on destroy the database
+# cleanup provisioner runs first (drops replication slot, reassigns ownership),
+# then this user is deleted.
 resource "google_sql_user" "managed_kafka_iam" {
   name     = "service-${data.google_project.current.number}@gcp-sa-managedkafka.iam"
   instance = google_sql_database_instance.postgres.name
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
   project  = var.project_id
-
-  # NOTE: On destroy, the CDC connector grants this user object ownership.
-  # Run scripts/teardown.sh before terraform destroy to drop the database
-  # first (removing owned objects), then this user can be deleted.
 }
 
 # -----------------------------------------------------------------------------
