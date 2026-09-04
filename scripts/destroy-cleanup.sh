@@ -111,3 +111,4 @@ gcloud storage buckets delete "${GCS_BUCKET}" --quiet 2>/dev/null || true
 
 echo ""
 echo "=== CDC cleanup completed ==="
+

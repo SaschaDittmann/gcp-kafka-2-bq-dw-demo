@@ -8,7 +8,7 @@
 # =============================================================================
 
 project_id  = "your-project-id"
-region      = "europe-west1"
+region      = "us-central1"
 environment = "demo"
 name_prefix = "cdc-demo"
 
